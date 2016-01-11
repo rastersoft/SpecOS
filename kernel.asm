@@ -48,7 +48,7 @@
 	ADD HL,DE
 	DJNZ INTP3
 	CALL FINDNEXT
-	JR C,INTEND
+	JR C,INTEND2
 .INTP2	LD A,(HL)
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
@@ -73,26 +73,35 @@
 	POP AF
 	RETI
 
-;.INTEND	LD A,R
-	CALL DEBUG8
+.INTEND2	POP HL
+	POP DE
+	POP BC
+	POP AF
+	EI
 	HALT
 
 ; Returns in HL the next table entry of the next task to run. If there is no task, sets CF
 .FINDNEXT	LD HL,PRTABLE
 	LD B,MAXPR
-.INTLOOP1	LD A,(HL)
+.INTLOOP1	PUSH HL
+	LD A,(HL)
 	CP A,$FF
 	JP Z,INTNFOUND ; If it is FF, its an empty entry
-	PUSH HL
 	INC HL
 	INC HL
 	INC HL
+	BIT 0,(HL)
+	JR Z,INTNFOUND ; If bit 0 is 0, this process is paused and should not run
 	LD A,(HL)
 	INC HL
+	BIT 7,(HL)
+	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
 	AND A,(HL)
+	JR Z,INTNFOUND
 	POP HL
-	RET NZ
-.INTNFOUND	LD DE,PRSIZE
+	RET
+.INTNFOUND	POP HL
+	LD DE,PRSIZE
 	ADD HL,DE
 	DJNZ INTLOOP1
 	SCF
@@ -122,14 +131,14 @@
 
 .tmpdata	DEFB 0
 	DEFW PRTABLE+PRSIZE-10
-	DEFB $80
-	DEFB $80
+	DEFB $81
+	DEFB $81
 	DEFS PRSIZE-7,0
 	DEFW CODE1
 	DEFB 0
 	DEFW PRTABLE+2*PRSIZE-10
-	DEFB $80
-	DEFB $80
+	DEFB $81
+	DEFB $81
 	DEFS PRSIZE-7,0
 	DEFW CODE2
 
