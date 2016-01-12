@@ -32,6 +32,7 @@
 	PUSH BC
 	PUSH DE
 	PUSH HL
+	PUSH IY
 	LD HL,(CTABLE)
 	INC HL
 	LD (tmpsp),SP
@@ -67,13 +68,15 @@
 	PUSH BC
 	POP HL
 	LD SP,HL
-.INTEND	POP HL
+.INTEND	POP IY
+	POP HL
 	POP DE
 	POP BC
 	POP AF
 	RETI
 
-.INTEND2	POP HL
+.INTEND2	POP IY
+	POP HL
 	POP DE
 	POP BC
 	POP AF
@@ -81,28 +84,23 @@
 	HALT
 
 ; Returns in HL the next table entry of the next task to run. If there is no task, sets CF
-.FINDNEXT	LD HL,PRTABLE
+.FINDNEXT	LD IY,PRTABLE
 	LD B,MAXPR
-.INTLOOP1	PUSH HL
-	LD A,(HL)
+.INTLOOP1	LD A,(IY+0)
 	CP A,$FF
 	JP Z,INTNFOUND ; If it is FF, its an empty entry
-	INC HL
-	INC HL
-	INC HL
-	BIT 0,(HL)
+	BIT 0,(IY+3)
 	JR Z,INTNFOUND ; If bit 0 is 0, this process is paused and should not run
-	LD A,(HL)
-	INC HL
-	BIT 7,(HL)
+	BIT 7,(IY+4)
 	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
-	AND A,(HL)
+	LD A,(IY+3)
+	AND A,(IY+4)
 	JR Z,INTNFOUND
+	PUSH IY
 	POP HL
 	RET
-.INTNFOUND	POP HL
-	LD DE,PRSIZE
-	ADD HL,DE
+.INTNFOUND	LD DE,PRSIZE
+	ADD IY,DE
 	DJNZ INTLOOP1
 	SCF
 	RET
