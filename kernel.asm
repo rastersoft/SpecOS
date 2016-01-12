@@ -23,7 +23,7 @@
 ;    1 Message received   // if 1, wait for a message arriving
 ;    2 Key pressed        // if 1, wait for a keypress
 ;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
-;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 here
+;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
 
 
 ; Stack         (up to the end)
@@ -121,28 +121,20 @@
 	LD BC,prsize*maxpr-1
 	LD (HL),$FF
 	LDIR ; Set process table contents to $FF
-	LD HL,TMPDATA
-	LD DE,PRTABLE
-	LD BC,PRSIZE*2
-	LDIR
+	LD HL,CODE1
+	LD A,1
+	CALL CALLBACK
+	LD HL,CODE3
+	LD A,1
+	CALL CALLBACK
+	LD HL,CODE2
+	LD A,1
+	CALL CALLBACK
 	LD A,$BF
 	LD I,A
 	IM 2
 	EI
 .i2	JR i2
-
-.tmpdata	DEFB 0
-	DEFW PRTABLE+PRSIZE-REGISTERS
-	DEFB $40
-	DEFB $C0
-	DEFS PRSIZE-7,0
-	DEFW CODE1
-	DEFB 0
-	DEFW PRTABLE+2*PRSIZE-REGISTERS
-	DEFB $40
-	DEFB $C0
-	DEFS PRSIZE-7,0
-	DEFW CODE2
 
 .CODE1	LD A,2
 	CALL DEBUG8
@@ -175,12 +167,36 @@
 	HALT
 	JR CODE2
 
+.CODE3	LD A,6
+	CALL DEBUG8
+	OUT (254),A
+	LD A,R
+	SET 6,A
+	LD B,A
+.CODE3LOOP	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	DJNZ CODE3LOOP
+	CALL SWAPTASK
+	JR CODE3
 
 ; System calls
 ; A: function to execute
 ; RETURN: C flag set if error; A: error code
 
-.callback      CP A,0 ; pointer to address. Receives in HL a pointer, sets the bank and returns in HL the pointer address
+;  A=0; receives a memory pointer in HL; sets the memory bank and returns in HL the memory address
+.callback      CP A,0
 	JR NZ,NEXT1
 	LD A,L
 	RLC H
@@ -201,43 +217,50 @@
 	POP BC
 	RET
 
-.NEXT1	CP A,1 ; creates a new process. Receives in DE the address where the code is
+; A=1; creates a new process. Receives in HL the address where the code is.
+.NEXT1	CP A,1
 	JR NZ,NEXT2
-	PUSH HL
 	PUSH BC
 	PUSH DE
-	LD HL,PRTABLE ; process table address
+	PUSH IY
+	LD IY,PRTABLE ; process table address
 	LD B,MAXPR ; search process table for an empty entry
 	LD DE,PRSIZE
-.NPRLOOP	LD A,(HL)
+.NPRLOOP	LD A,(IY+0)
 	CP A,$FF
 	JR Z,FND_FREE
-	ADD HL,DE
+	ADD IY,DE
 	DJNZ NPRLOOP
 	SCF
 	LD A,1 ; No more free tasks
-	RET
-.FND_FREE	POP DE
-	PUSH HL
-	XOR A
-	LD (HL),A ; Page 0
-	LD BC,PRSIZE-2
-	ADD HL,BC
-	PUSH HL
-	LD (HL),E ; "Push" the run address in the stack
-	INC HL
-	LD (HL),D
+	POP IY
 	POP DE
-	POP HL
+	POP BC
+	RET
+.FND_FREE	XOR A
+	LD (IY+0),A ; Page 0
+	PUSH HL
+	POP BC
+	LD HL,PRSIZE-2
+	PUSH IY
+	POP DE
+	ADD HL,DE
+	LD (HL),C ; "Push" the run address in the stack
 	INC HL
-	LD (HL),E ; Stack address
-	INC HL
-	LD (HL),D
-	INC HL
-	LD (HL),1
-	INC HL
-	LD (HL),1
-	OR A,A
+	LD (HL),B
+	LD HL,PRSIZE-REGISTERS
+	PUSH IY
+	POP DE
+	ADD HL,DE
+	LD (IY+1),L ; Stack address
+	LD (IY+2),H
+	LD A,$C0
+	LD (IY+3),A
+	LD (IY+4),A
+	XOR A,A ; NO ERROR
+	POP IY
+	POP DE
+	POP BC
 	RET
 .NEXT2	RET
 
