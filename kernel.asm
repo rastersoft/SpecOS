@@ -1,6 +1,7 @@
 	defc prsize=32 ; size for each process table entry
 	defc maxpr=5 ; maximum number of processes
 	defc prtable=$BF00-(PRSIZE*MAXPR) ; address of the process table
+	defc REGISTERS = 12 ; number of bytes used to store the registers when entering the task manager
 
 	org $5B00
 	JP main_start
@@ -10,70 +11,74 @@
 .ctable	defw 0  ; pointer to the current process table
 .tmpsp	defw 0  ; to temporary store an SP register
 .dbg	defw 16384
-	defs 78,0
+	defs 70,0
 
 ; Data stored in each entry in the process table
 ; Memory page   (1 byte)  // last value sent to 7FFD; FF means this entry is empty
 ; Stack Pointer (2 bytes)
 ; Wakeup Bits   (1 byte)  // each bit is put to 1 when that condition is received, and compared with the Wakeup Mask
-;                         // bit 0 is 0 if the process is paused, and 1 if it should run (but can be waiting for another signal if the Mask bit 0 is 0)
+;    6 Run/Pause          // 0 if the process is paused, and 1 if it should run (but can be waiting for another signal if the Mask bit 6 is 0)
 ; Wakeup Mask   (1 byte)
-;    0 Runnable           // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
-;    1 Interrupt 50Hz
-;    2 Message received
-;    3 Key pressed
+;    0 Interrupt 50Hz     // if 1, wait for 50Hz interrupt
+;    1 Message received   // if 1, wait for a message arriving
+;    2 Key pressed        // if 1, wait for a keypress
+;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
 ;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 here
 
 
 ; Stack         (up to the end)
 
+.SWAPTASK	DI
+	PUSH AF
+	PUSH BC
+	PUSH DE
+	PUSH HL
+	PUSH IY
+	JR STARTINT
 ; interrupt routine; do not relocate (must be at 5B5B)
 .INTINIT	PUSH AF
 	PUSH BC
 	PUSH DE
 	PUSH HL
 	PUSH IY
-	LD HL,(CTABLE)
-	INC HL
-	LD (tmpsp),SP
-	LD BC,(TMPSP)
-	LD (HL),C
-	INC HL
-	LD (HL),B
-	CALL FINDNEXT
-	JP NC,INTP2
-	LD HL,PRTABLE+4
+	LD IY,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
-.INTP3	SET 7,(HL)
-	ADD HL,DE
+.INTP4	SET 0,(IY+3) ; set the 50Hz bit
+	ADD IY,DE
+	DJNZ INTP4
+.STARTINT	LD IY,(CTABLE)
+	LD (tmpsp),SP
+	LD BC,(TMPSP)
+	LD (IY+1),C
+	LD (IY+2),B
+	CALL FINDNEXT
+	JP NC,INTP2
+	LD IY,PRTABLE
+	LD B,MAXPR
+	LD DE,PRSIZE
+.INTP3	SET 7,(IY+4) ; reset the round-robin bit
+	ADD IY,DE
 	DJNZ INTP3
 	CALL FINDNEXT
 	JR C,INTEND2
-.INTP2	LD A,(HL)
+.INTP2	LD A,(IY+0)
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
-	LD (CTABLE),HL
-	INC HL
-	PUSH HL
-	POP BC
-	LD C,(HL)
-	INC HL
-	LD B,(HL)
-	INC HL
-	INC HL
+	LD (CTABLE),IY
 	LD A,$7F
-	AND A,(HL)
-	LD (HL),A
-	PUSH BC
-	POP HL
+	AND A,(IY+4)
+	LD (IY+4),A
+	LD L,(IY+1)
+	LD H,(IY+2)
 	LD SP,HL
 .INTEND	POP IY
 	POP HL
 	POP DE
 	POP BC
 	POP AF
-	RETI
+	EI
+	RET
 
 .INTEND2	POP IY
 	POP HL
@@ -83,21 +88,20 @@
 	EI
 	HALT
 
-; Returns in HL the next table entry of the next task to run. If there is no task, sets CF
+; Returns in IY the next table entry of the next task to run. If there is no task, sets CF
 .FINDNEXT	LD IY,PRTABLE
 	LD B,MAXPR
 .INTLOOP1	LD A,(IY+0)
 	CP A,$FF
 	JP Z,INTNFOUND ; If it is FF, its an empty entry
-	BIT 0,(IY+3)
+	BIT 6,(IY+3)
 	JR Z,INTNFOUND ; If bit 0 is 0, this process is paused and should not run
 	BIT 7,(IY+4)
 	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
 	LD A,(IY+3)
 	AND A,(IY+4)
+	AND A,$7F      ; Don't check the round-robin bit here
 	JR Z,INTNFOUND
-	PUSH IY
-	POP HL
 	RET
 .INTNFOUND	LD DE,PRSIZE
 	ADD IY,DE
@@ -128,22 +132,41 @@
 .i2	JR i2
 
 .tmpdata	DEFB 0
-	DEFW PRTABLE+PRSIZE-10
-	DEFB $81
-	DEFB $81
+	DEFW PRTABLE+PRSIZE-REGISTERS
+	DEFB $40
+	DEFB $C0
 	DEFS PRSIZE-7,0
 	DEFW CODE1
 	DEFB 0
-	DEFW PRTABLE+2*PRSIZE-10
-	DEFB $81
-	DEFB $81
+	DEFW PRTABLE+2*PRSIZE-REGISTERS
+	DEFB $40
+	DEFB $C0
 	DEFS PRSIZE-7,0
 	DEFW CODE2
 
 .CODE1	LD A,2
 	CALL DEBUG8
 	OUT (254),A
-	HALT
+	LD A,R
+	SET 7,A
+	SET 6,A
+	LD B,A
+.CODE1LOOP	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	DJNZ CODE1LOOP
+	CALL SWAPTASK
 	JR CODE1
 
 .CODE2	LD A,5
