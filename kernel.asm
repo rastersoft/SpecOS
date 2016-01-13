@@ -136,6 +136,8 @@
 	EI
 .i2	JR i2
 
+; three test tasks to see if this works fine
+
 .CODE1	LD A,2
 	CALL DEBUG8
 	OUT (254),A
