@@ -89,7 +89,6 @@ them after.
 The current functions are the follow ones:
 
   $BF02 : Set a memory bank from a memory pointer.
-
           Receives a memory pointer in HL; sets the memory bank at C000 and
           returns in HL the memory address
 
