@@ -10,8 +10,25 @@
 	JP MAIN_START
 .CTABLE	defw 0     ; pointer to the current process table
 .TMPSP	defw 0     ; to temporary store an SP register, since there is only LD (nn),SP instruction
+
+.IDLETASK	defb 0     ; this is a false entry for an idle task, called when no task is ready
+	defw IDLESP
+	defb 0
+	defb 0
+	defw 0  ; 16 bytes for stack
+	defw 0
+.IDLESP	defw 0
+	defw 0
+	defw 0
+	defw 0
+	defw 0
+	defw IDLECODE
+
 .DBG	defw 16384
-	defs 74,0
+	defs 50,0
+
+.IDLECODE	HALT
+	JR IDLECODE ; just wait for an interrupt forever
 
 ; Data stored in each entry in the process table
 ; Memory page   (1 byte)  // last value sent to 7FFD; FF means this entry is empty
@@ -59,7 +76,8 @@
 	ADD IY,DE
 	DJNZ INTP3
 	CALL FINDNEXT
-	JR C,INTEND2
+	JR NC,INTP2
+	LD IY,IDLETASK
 .INTP2	LD A,(IY+0)
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
@@ -77,14 +95,6 @@
 	POP AF
 	EI
 	RET
-
-.INTEND2	POP IY
-	POP HL
-	POP DE
-	POP BC
-	POP AF
-	EI
-	HALT
 
 ; Returns in IY the next table entry of the next task to run. If there is no task, sets CF
 .FINDNEXT	LD IY,PRTABLE
