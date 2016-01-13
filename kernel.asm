@@ -222,11 +222,12 @@
 ; A=1; creates a new process. Receives in HL the address where the code is.
 .NEXT1	CP A,1
 	JR NZ,NEXT2
+	DI             ; avoid interferences from other tasks
 	PUSH BC
 	PUSH DE
 	PUSH IY
-	LD IY,PRTABLE ; process table address
-	LD B,MAXPR ; search process table for an empty entry
+	LD IY,PRTABLE  ; process table address
+	LD B,MAXPR     ; search process table for an empty entry
 	LD DE,PRSIZE
 .NPRLOOP	LD A,(IY+0)
 	CP A,$FF
@@ -234,10 +235,11 @@
 	ADD IY,DE
 	DJNZ NPRLOOP
 	SCF
-	LD A,1 ; No more free tasks
+	LD A,1         ; No more free tasks
 	POP IY
 	POP DE
 	POP BC
+	EI
 	RET
 .FND_FREE	XOR A
 	LD (IY+0),A ; Page 0
@@ -247,7 +249,7 @@
 	PUSH IY
 	POP DE
 	ADD HL,DE
-	LD (HL),C ; "Push" the run address in the stack
+	LD (HL),C      ; "Push" the run address in the stack
 	INC HL
 	LD (HL),B
 	LD HL,PRSIZE-REGISTERS
@@ -263,6 +265,7 @@
 	POP IY
 	POP DE
 	POP BC
+	EI
 	RET
 .NEXT2	RET
 
