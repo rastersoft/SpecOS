@@ -1,17 +1,19 @@
-	defc prsize=32 ; size for each process table entry
-	defc maxpr=5 ; maximum number of processes
-	defc prtable=$BF00-(PRSIZE*MAXPR) ; address of the process table
-	defc REGISTERS = 12 ; number of bytes used to store the registers when entering the task manager
+	defc PRSIZE=32 ; size for each process table entry
+	defc MAXPR=5 ; maximum number of processes
+	defc PRTABLE=$BF00-(PRSIZE*MAXPR) ; address of the process table
+
+	defc REGISTERS = 12 ; number of bytes used to store the registers
+	                    ; when entering the task manager.
+	                    ; Currently AF, BC, DE, HL, IY and the return address
 
 	org $5B00
-	JP main_start
+	JP MAIN_START
 ; call address: 5B04
-	JP callback
-.jobs	defb 0
-.ctable	defw 0  ; pointer to the current process table
-.tmpsp	defw 0  ; to temporary store an SP register
-.dbg	defw 16384
-	defs 70,0
+	JP CALLBACK
+.CTABLE	defw 0     ; pointer to the current process table
+.TMPSP	defw 0     ; to temporary store an SP register, since there is only LD (nn),SP instruction
+.DBG	defw 16384
+	defs 71,0
 
 ; Data stored in each entry in the process table
 ; Memory page   (1 byte)  // last value sent to 7FFD; FF means this entry is empty
@@ -24,8 +26,6 @@
 ;    2 Key pressed        // if 1, wait for a keypress
 ;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
 ;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
-
-
 ; Stack         (up to the end)
 
 .SWAPTASK	DI
@@ -211,7 +211,7 @@
 	OR A,$10
 	PUSH BC
 	LD BC,(CTABLE)
-	LD (BC),A
+	LD (BC),A ; store the currently used page in the task list
 	LD BC,$7FFD
 	OUT (C),A
 	POP BC
@@ -264,6 +264,7 @@
 	RET
 .NEXT2	RET
 
+; these functions allow to debug the code, by printing the content of register A or BC in screen (in binary form)
 .DEBUG8	PUSH HL
 	PUSH AF
 	LD A,170
