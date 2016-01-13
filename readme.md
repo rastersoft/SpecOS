@@ -77,6 +77,29 @@ The location of this list is set in the source code with the PRTABLE definition.
 The number of entries is defined in MAXPR, and the size for each entry is
 defined in PRSIZE.
 
+## Kernel functions
+
+There are several functions available for the processes. There are entry points
+located from address $BF02, with each one using 3 bytes. Calling the corresponding
+entry point will call the function.
+
+Before calling these functions it is mandatory to disable interrupts, and enable
+them after.
+
+The current functions are the follow ones:
+
+  $BF02 : Set a memory bank from a memory pointer.
+
+          Receives a memory pointer in HL; sets the memory bank at C000 and
+          returns in HL the memory address
+
+          Pointer format:   bcxxxxxx xxxxxxxa
+                 being abc three bits defining the RAM page where the pointer is
+                 located, and xxxxxxxxxxxxxxx0 the pointer itself.
+
+  $BF05 : Launches a new task. Receives in HL the address where the code is.
+          Returns C unset if all went fine; C set if there are no more tasks available
+
 
 ## TODO
 

@@ -1,6 +1,6 @@
 	defc PRSIZE=32 ; size for each process table entry
 	defc MAXPR=5 ; maximum number of processes
-	defc PRTABLE=$BF00-(PRSIZE*MAXPR) ; address of the process table
+	defc PRTABLE=$BE00-(PRSIZE*MAXPR) ; address of the process table
 
 	defc REGISTERS = 12 ; number of bytes used to store the registers
 	                    ; when entering the task manager.
@@ -8,12 +8,10 @@
 
 	org $5B00
 	JP MAIN_START
-; call address: 5B04
-	JP CALLBACK
 .CTABLE	defw 0     ; pointer to the current process table
 .TMPSP	defw 0     ; to temporary store an SP register, since there is only LD (nn),SP instruction
 .DBG	defw 16384
-	defs 71,0
+	defs 74,0
 
 ; Data stored in each entry in the process table
 ; Memory page   (1 byte)  // last value sent to 7FFD; FF means this entry is empty
@@ -109,32 +107,113 @@
 	SCF
 	RET
 
-.main_start	DI
-	LD HL,$BF00
-	LD DE,$BF01
+; Sets a memory bank from a memory pointer.
+; Receives a memory pointer in HL; sets the memory bank and returns in HL the memory address
+; Pointer format:   bcxxxxxx xxxxxxxa
+; being abc three bits defining the RAM page where the pointer is located, and xxxxxxxxxxxxxxx0 the pointer itself.
+.SETBANK	PUSH AF
+	PUSH BC
+	LD A,L
+	RLC H
+	RLA
+	RLC H
+	RLA
+	RRC H
+	RRC H
+	AND H,$3F
+	AND L,$FE
+	AND A,$07
+	OR A,$10
+	LD BC,(CTABLE)
+	LD (BC),A       ; store the currently used page in the current task entry
+	LD BC,$7FFD
+	OUT (C),A
+	POP BC
+	POP AF
+	RET
+
+
+; Creates a new task. Receives in HL the address where the code is.
+; Returns C unset if all went fine; C set if there are no more tasks available
+.NEWTASK	PUSH BC
+	PUSH DE
+	PUSH IY
+	LD IY,PRTABLE  ; process table address
+	LD B,MAXPR     ; search process table for an empty entry
+	LD DE,PRSIZE
+.NPRLOOP	LD A,(IY+0)
+	CP A,$FF
+	JR Z,FND_FREE
+	ADD IY,DE
+	DJNZ NPRLOOP
+	SCF
+	LD A,1         ; No more free tasks
+	POP IY
+	POP DE
+	POP BC
+	RET
+.FND_FREE	XOR A
+	LD (IY+0),A ; Page 0
+	PUSH HL
+	POP BC
+	LD HL,PRSIZE-2
+	PUSH IY
+	POP DE
+	ADD HL,DE
+	LD (HL),C      ; "Push" the run address in the stack
+	INC HL
+	LD (HL),B
+	LD HL,PRSIZE-REGISTERS
+	PUSH IY
+	POP DE
+	ADD HL,DE
+	LD (IY+1),L ; Stack address
+	LD (IY+2),H
+	LD A,$C0
+	LD (IY+3),A
+	LD (IY+4),A
+	XOR A,A ; NO ERROR
+	POP IY
+	POP DE
+	POP BC
+	RET
+
+
+.MAIN_START	DI
+
+	LD HL,$BE00
+	LD DE,$BE01
 	LD BC,$100
-	LD A,$5B
-	LD (HL),A
-	LDIR
-	LD HL,prtable
-	LD DE,prtable+1
-	LD BC,prsize*maxpr-1
+	LD (HL),$5B
+	LDIR              ; Create a table with 257 "$5B" values
+
+	LD HL,PRTABLE
+	LD DE,PRTABLE+1
+	LD BC,PRSIZE*MAXPR-1
 	LD (HL),$FF
-	LDIR ; Set process table contents to $FF
+	LDIR              ; Set process table contents to $FF
+
+	LD HL,CBTABLE
+	LD DE,$BF02
+	LD BC,CBTABLE2-CBTABLE
+	LDIR              ; Copy the callback table
+
 	LD HL,CODE1
-	LD A,1
-	CALL CALLBACK
+	CALL $BF05
 	LD HL,CODE3
-	LD A,1
-	CALL CALLBACK
+	CALL $BF05
 	LD HL,CODE2
-	LD A,1
-	CALL CALLBACK
-	LD A,$BF
+	CALL $BF05
+
+	LD A,$BE
 	LD I,A
 	IM 2
 	EI
 .i2	JR i2
+
+.CBTABLE	JP SETBANK
+	JP NEWTASK
+.CBTABLE2	defb 0
 
 ; three test tasks to see if this works fine
 
@@ -193,80 +272,7 @@
 	CALL SWAPTASK
 	JR CODE3
 
-; System calls
-; A: function to execute
-; RETURN: C flag set if error; A: error code
 
-;  A=0; receives a memory pointer in HL; sets the memory bank and returns in HL the memory address
-.callback      CP A,0
-	JR NZ,NEXT1
-	LD A,L
-	RLC H
-	RLA
-	RLC H
-	RLA
-	RRC H
-	RRC H
-	AND H,$3F
-	AND L,$FE
-	AND A,$07
-	OR A,$10
-	PUSH BC
-	LD BC,(CTABLE)
-	LD (BC),A ; store the currently used page in the task list
-	LD BC,$7FFD
-	OUT (C),A
-	POP BC
-	RET
-
-; A=1; creates a new process. Receives in HL the address where the code is.
-.NEXT1	CP A,1
-	JR NZ,NEXT2
-	DI             ; avoid interferences from other tasks
-	PUSH BC
-	PUSH DE
-	PUSH IY
-	LD IY,PRTABLE  ; process table address
-	LD B,MAXPR     ; search process table for an empty entry
-	LD DE,PRSIZE
-.NPRLOOP	LD A,(IY+0)
-	CP A,$FF
-	JR Z,FND_FREE
-	ADD IY,DE
-	DJNZ NPRLOOP
-	SCF
-	LD A,1         ; No more free tasks
-	POP IY
-	POP DE
-	POP BC
-	EI
-	RET
-.FND_FREE	XOR A
-	LD (IY+0),A ; Page 0
-	PUSH HL
-	POP BC
-	LD HL,PRSIZE-2
-	PUSH IY
-	POP DE
-	ADD HL,DE
-	LD (HL),C      ; "Push" the run address in the stack
-	INC HL
-	LD (HL),B
-	LD HL,PRSIZE-REGISTERS
-	PUSH IY
-	POP DE
-	ADD HL,DE
-	LD (IY+1),L ; Stack address
-	LD (IY+2),H
-	LD A,$C0
-	LD (IY+3),A
-	LD (IY+4),A
-	XOR A,A ; NO ERROR
-	POP IY
-	POP DE
-	POP BC
-	EI
-	RET
 .NEXT2	RET
 
 ; these functions allow to debug the code, by printing the content of register A or BC in screen (in binary form)
