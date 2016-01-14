@@ -1,5 +1,5 @@
 	defc PRSIZE=32 ; size for each process table entry
-	defc MAXPR=5 ; maximum number of processes
+	defc MAXPR=8 ; maximum number of processes
 	defc PRTABLE=$BE00-(PRSIZE*MAXPR) ; address of the process table
 
 	defc REGISTERS = 12 ; number of bytes used to store the registers
@@ -254,6 +254,26 @@
 	LD HL,TESTTASK
 	CALL $BF05
 	LD DE,$0802
+	LD C,3
+	LD HL,TESTTASK
+	CALL $BF05
+
+	LD DE,$0C09
+	LD C,2
+	LD HL,TESTTASK
+	CALL $BF05
+
+	LD DE,$020B
+	LD C,0
+	LD HL,TESTTASK
+	CALL $BF05
+
+	LD DE,$0C12
+	LD C,1
+	LD HL,TESTTASK
+	CALL $BF05
+
+	LD DE,$150F
 	LD C,3
 	LD HL,TESTTASK
 	CALL $BF05
