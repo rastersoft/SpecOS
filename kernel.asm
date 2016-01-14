@@ -1,5 +1,5 @@
 	defc PRSIZE=32 ; size for each process table entry
-	defc MAXPR=6 ; maximum number of processes
+	defc MAXPR=5 ; maximum number of processes
 	defc PRTABLE=$BE00-(PRSIZE*MAXPR) ; address of the process table
 
 	defc REGISTERS = 12 ; number of bytes used to store the registers
@@ -63,7 +63,7 @@
 	ADD IY,DE
 	DJNZ INTP4
 .STARTINT	LD IY,(CTABLE)
-	LD (tmpsp),SP
+	LD (TMPSP),SP
 	LD BC,(TMPSP)
 	LD (IY+1),C
 	LD (IY+2),B
@@ -273,7 +273,7 @@
 	SET 1,C
 .TEST6	CALL PRINTBALL
 	CALL SWAPTASK
-	HALT
+;	HALT
 	JR TESTLOOP
 
 
@@ -327,7 +327,10 @@
 	LD A,H
 	AND $18
 	OR $40
-	LD H,A
+	BIT 5,A
+	JR Z,GETBALL2
+	RES 4,A
+.GETBALL2	LD H,A
 	RET
 
 ; these functions allow to debug the code, by printing the content of register A or BC in screen (in binary form)
