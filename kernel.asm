@@ -210,8 +210,17 @@
 
 	LD HL,TESTTASK
 	CALL $BF05
+	NOP
+	NOP
 	LD HL,TESTTASK
 	CALL $BF05
+	NOP
+	LD HL,TESTTASK
+	CALL $BF05
+	NOP
+	NOP
+	NOP
+	NOP
 	LD HL,TESTTASK
 	CALL $BF05
 
@@ -219,7 +228,7 @@
 	LD I,A
 	IM 2
 	EI
-.i2	JR i2
+.I2	JR I2
 
 .CBTABLE	JP SETBANK
 	JP NEWTASK
@@ -272,20 +281,7 @@
 ; paints a ball at H,L coordinates
 .PRINTBALL	PUSH AF
 	PUSH HL
-	LD A,L
-	AND $1F
-	LD L,A
-	LD A,H
-	RRCA
-	RRCA
-	RRCA
-	AND $E0
-	OR A,L
-	LD L,A
-	LD A,H
-	AND $18
-	OR $40
-	LD H,A
+	CALL GETBALL
 	LD (HL),$3C
 	INC H
 	LD (HL),$7E
@@ -308,7 +304,17 @@
 .DELBALL	PUSH AF
 	PUSH BC
 	PUSH HL
-	LD A,L
+	CALL GETBALL
+	LD B,8
+.DELBALL1	LD (HL),0
+	INC H
+	DJNZ DELBALL1
+	POP HL
+	POP BC
+	POP AF
+	RET
+
+.GETBALL	LD A,L
 	AND $1F
 	LD L,A
 	LD A,H
@@ -322,15 +328,7 @@
 	AND $18
 	OR $40
 	LD H,A
-	LD B,8
-.DELBALL1	LD (HL),0
-	INC H
-	DJNZ DELBALL1
-	POP HL
-	POP BC
-	POP AF
 	RET
-
 
 ; these functions allow to debug the code, by printing the content of register A or BC in screen (in binary form)
 .DEBUG8	PUSH HL
