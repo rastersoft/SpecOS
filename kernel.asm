@@ -1,5 +1,5 @@
 	defc PRSIZE=32 ; size for each process table entry
-	defc MAXPR=5 ; maximum number of processes
+	defc MAXPR=6 ; maximum number of processes
 	defc PRTABLE=$BE00-(PRSIZE*MAXPR) ; address of the process table
 
 	defc REGISTERS = 12 ; number of bytes used to store the registers
