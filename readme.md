@@ -104,7 +104,7 @@ The current functions are the follow ones:
 
 ## TODO
 
- * Functions to wait for an specific event
+ * Functions for waiting for an specific event
  * Memory management (malloc et al.)
  * Add a messaging system to allow IPC comunication
  * Read keyboard and mouse
