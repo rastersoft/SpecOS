@@ -208,11 +208,11 @@
 	LD BC,CBTABLE2-CBTABLE
 	LDIR              ; Copy the callback table
 
-	LD HL,CODE1
+	LD HL,TESTTASK
 	CALL $BF05
-	LD HL,CODE3
+	LD HL,TESTTASK
 	CALL $BF05
-	LD HL,CODE2
+	LD HL,TESTTASK
 	CALL $BF05
 
 	LD A,$BE
@@ -225,65 +225,112 @@
 	JP NEWTASK
 .CBTABLE2	defb 0
 
-; three test tasks to see if this works fine
 
-.CODE1	LD A,2
-	CALL DEBUG8
-	OUT (254),A
+; BOUNCES A BALL
+.TESTTASK	LD A,R
+	AND $0F
+	LD H,A
 	LD A,R
-	SET 7,A
-	SET 6,A
-	LD B,A
-.CODE1LOOP	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	DJNZ CODE1LOOP
+	AND $1F
+	LD L,A
+	LD A,R
+	LD C,A
+.TESTLOOP	CALL DELBALL
+	BIT 0,C
+	JR Z,TEST1
+	INC H
+	LD A,H
+	CP 23
+	JR NZ,TEST3
+	RES 0,C
+	JR TEST3
+.TEST1	DEC H
+	LD A,H
+	CP 0
+	JR NZ,TEST3
+	SET 0,C
+.TEST3	BIT 1,C
+	JR Z,TEST4
+	INC L
+	LD A,L
+	CP 31
+	JR NZ,TEST6
+	RES 1,C
+	JR TEST6
+.TEST4	DEC L
+	LD A,L
+	CP 0
+	JR NZ,TEST6
+	SET 1,C
+.TEST6	CALL PRINTBALL
 	CALL SWAPTASK
-	JR CODE1
-
-.CODE2	LD A,5
-	CALL DEBUG8
-	OUT (254),A
 	HALT
-	JR CODE2
-
-.CODE3	LD A,6
-	CALL DEBUG8
-	OUT (254),A
-	LD A,R
-	SET 6,A
-	LD B,A
-.CODE3LOOP	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	NOP
-	DJNZ CODE3LOOP
-	CALL SWAPTASK
-	JR CODE3
+	JR TESTLOOP
 
 
-.NEXT2	RET
+
+; paints a ball at H,L coordinates
+.PRINTBALL	PUSH AF
+	PUSH HL
+	LD A,L
+	AND $1F
+	LD L,A
+	LD A,H
+	RRCA
+	RRCA
+	RRCA
+	AND $E0
+	OR A,L
+	LD L,A
+	LD A,H
+	AND $18
+	OR $40
+	LD H,A
+	LD (HL),$3C
+	INC H
+	LD (HL),$7E
+	INC H
+	LD (HL),$FF
+	INC H
+	LD (HL),$FF
+	INC H
+	LD (HL),$FF
+	INC H
+	LD (HL),$FF
+	INC H
+	LD (HL),$7E
+	INC H
+	LD (HL),$3C
+	POP HL
+	POP AF
+	RET
+
+.DELBALL	PUSH AF
+	PUSH BC
+	PUSH HL
+	LD A,L
+	AND $1F
+	LD L,A
+	LD A,H
+	RRCA
+	RRCA
+	RRCA
+	AND $E0
+	OR A,L
+	LD L,A
+	LD A,H
+	AND $18
+	OR $40
+	LD H,A
+	LD B,8
+.DELBALL1	LD (HL),0
+	INC H
+	DJNZ DELBALL1
+	POP HL
+	POP BC
+	POP AF
+	RET
+
 
 ; these functions allow to debug the code, by printing the content of register A or BC in screen (in binary form)
 .DEBUG8	PUSH HL
