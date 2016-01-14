@@ -157,10 +157,12 @@
 
 
 ; Creates a new task. Receives in HL the address where the code is.
+; The task will receive the values for AF, BC and DE passed when calling this function
 ; Returns C unset if all went fine; C set if there are no more tasks available
-.NEWTASK	PUSH BC
+.NEWTASK	PUSH IY
+	PUSH BC
 	PUSH DE
-	PUSH IY
+	PUSH AF
 	LD IY,PRTABLE  ; process table address
 	LD B,MAXPR     ; search process table for an empty entry
 	LD DE,PRSIZE
@@ -171,21 +173,39 @@
 	DJNZ NPRLOOP
 	SCF
 	LD A,1         ; No more free tasks
-	POP IY
+	POP AF
 	POP DE
 	POP BC
+	POP IY
 	RET
 .FND_FREE	XOR A
-	LD (IY+0),A ; Page 0
+	LD (IY+0),A    ; Page 0
 	PUSH HL
 	POP BC
-	LD HL,PRSIZE-2
+	LD HL,PRSIZE-1
 	PUSH IY
 	POP DE
 	ADD HL,DE
-	LD (HL),C      ; "Push" the run address in the stack
-	INC HL
-	LD (HL),B
+	LD (HL),B      ; "Push" the run address in the stack
+	DEC HL
+	LD (HL),C
+	DEC HL
+	POP DE         ; Original value of AF
+	LD (HL),D      ; "Push" AF
+	DEC HL
+	LD (HL),E
+	DEC HL
+	POP DE
+	POP BC
+	PUSH BC
+	PUSH DE        ; Recover values for BC and DE
+	LD (HL),B      ; "Push" BC
+	DEC HL
+	LD (HL),C
+	DEC HL
+	LD (HL),D      ; "Push" DE
+	DEC HL
+	LD (HL),E
 	LD HL,PRSIZE-REGISTERS
 	PUSH IY
 	POP DE
@@ -195,10 +215,10 @@
 	LD A,$C0       ; Round-robin and run bits enabled
 	LD (IY+3),A
 	LD (IY+4),A
-	XOR A ; NO ERROR
-	POP IY
+	XOR A          ; NO ERROR
 	POP DE
 	POP BC
+	POP IY
 	RET
 
 
@@ -222,22 +242,19 @@
 	LDIR              ; Copy the callback table
 
 	LD HL,TESTTASK
+	LD DE,$0505
+	LD C,0
 	CALL $BF05
-	NOP
-	NOP
+	LD DE,$1007
+	LD C,1
 	LD HL,TESTTASK
 	CALL $BF05
-	NOP
+	LD DE,$0515
+	LD C,2
 	LD HL,TESTTASK
 	CALL $BF05
-	NOP
-	NOP
-	NOP
-	NOP
-	LD HL,TESTTASK
-	CALL $BF05
-	NOP
-	NOP
+	LD DE,$0802
+	LD C,3
 	LD HL,TESTTASK
 	CALL $BF05
 
@@ -253,14 +270,8 @@
 
 
 ; BOUNCES A BALL
-.TESTTASK	LD A,R
-	AND $0F
-	LD H,A
-	LD A,R
-	AND $1F
-	LD L,A
-	LD A,R
-	LD C,A
+.TESTTASK	PUSH DE
+	POP HL
 .TESTLOOP	CALL DELBALL
 	BIT 0,C
 	JR Z,TEST1
@@ -289,11 +300,13 @@
 	JR NZ,TEST6
 	SET 1,C
 .TEST6	CALL PRINTBALL
-	DI
+	LD B,3
+.TEST7	DI
 	LD IY,(CTABLE)
 	SET 0,(IY+4) ; Wait for the 50Hz signal
 	RES 6,(IY+4) ; Pause it
 	CALL SWAPTASK
+	DJNZ TEST7
 	JR TESTLOOP
 
 

@@ -93,10 +93,12 @@ The current functions are the follow ones:
           returns in HL the memory address
 
           Pointer format:   bcxxxxxx xxxxxxxa
-                 being abc three bits defining the RAM page where the pointer is
-                 located, and xxxxxxxxxxxxxxx0 the pointer itself.
+          being abc three bits defining the RAM page where the pointer is
+          located, and xxxxxxxxxxxxxxx0 the pointer itself.
 
   $BF05 : Launches a new task. Receives in HL the address where the code is.
+          The task will receive in its registers the values contained in AF, BC and DE
+          when calling this function.
           Returns C unset if all went fine; C set if there are no more tasks available
 
 
