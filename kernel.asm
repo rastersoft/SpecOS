@@ -25,9 +25,11 @@
 	defw IDLECODE
 
 .DBG	defw 16384
-	defs 50,0
+	defs 45,0
 
-.IDLECODE	HALT
+.IDLECODE	LD A,7
+	OUT (254),A ; A red border will show the current load of the processor
+	HALT
 	JR IDLECODE ; just wait for an interrupt forever
 
 ; Data stored in each entry in the process table
@@ -56,11 +58,15 @@
 	PUSH DE
 	PUSH HL
 	PUSH IY
+	LD A,2
+	OUT (254),A  ; set border to RED color during workload. The IDLE task will put it to WHITE, showing the CPU usage
 	LD IY,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
-.INTP4	SET 0,(IY+3) ; set the 50Hz bit
-	ADD IY,DE
+.INTP4	BIT 0,(IY+4)
+	JR Z,INTP5
+	SET 0,(IY+3) ; set the 50Hz bit only if this task is waiting for it
+.INTP5	ADD IY,DE
 	DJNZ INTP4
 .STARTINT	LD IY,(CTABLE)
 	LD (TMPSP),SP
@@ -82,9 +88,7 @@
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
 	LD (CTABLE),IY
-	LD A,$7F
-	AND A,(IY+4)
-	LD (IY+4),A
+	RES 7,(IY+4)
 	LD L,(IY+1)
 	LD H,(IY+2)
 	LD SP,HL
@@ -107,9 +111,12 @@
 	BIT 7,(IY+4)
 	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
 	LD A,(IY+3)
-	AND A,(IY+4)
-	AND A,$7F      ; Don't check the round-robin bit here
+	AND (IY+4)
+	AND $7F        ; Don't check the round-robin bit here
 	JR Z,INTNFOUND
+	LD A,$C0
+	LD (IY+3),A
+	LD (IY+4),A    ; Remove the mask conditions and the signals
 	RET
 .INTNFOUND	LD DE,PRSIZE
 	ADD IY,DE
@@ -130,10 +137,16 @@
 	RLA
 	RRC H
 	RRC H
-	AND H,$3F
-	AND L,$FE
-	AND A,$07
-	OR A,$10
+	PUSH AF
+	LD A,H
+	AND $3F
+	LD H,A
+	LD A,L
+	AND $FE
+	LD L,A
+	POP AF
+	AND $07
+	OR $10
 	LD BC,(CTABLE)
 	LD (BC),A       ; store the currently used page in the current task entry
 	LD BC,$7FFD
@@ -177,12 +190,12 @@
 	PUSH IY
 	POP DE
 	ADD HL,DE
-	LD (IY+1),L ; Stack address
+	LD (IY+1),L    ; Stack address
 	LD (IY+2),H
-	LD A,$C0
+	LD A,$C0       ; Round-robin and run bits enabled
 	LD (IY+3),A
 	LD (IY+4),A
-	XOR A,A ; NO ERROR
+	XOR A ; NO ERROR
 	POP IY
 	POP DE
 	POP BC
@@ -219,6 +232,10 @@
 	CALL $BF05
 	NOP
 	NOP
+	NOP
+	NOP
+	LD HL,TESTTASK
+	CALL $BF05
 	NOP
 	NOP
 	LD HL,TESTTASK
@@ -272,8 +289,11 @@
 	JR NZ,TEST6
 	SET 1,C
 .TEST6	CALL PRINTBALL
+	DI
+	LD IY,(CTABLE)
+	SET 0,(IY+4) ; Wait for the 50Hz signal
+	RES 6,(IY+4) ; Pause it
 	CALL SWAPTASK
-;	HALT
 	JR TESTLOOP
 
 
@@ -322,7 +342,7 @@
 	RRCA
 	RRCA
 	AND $E0
-	OR A,L
+	OR L
 	LD L,A
 	LD A,H
 	AND $18
