@@ -101,6 +101,9 @@ The current functions are the follow ones:
           when calling this function.
           Returns C unset if all went fine; C set if there are no more tasks available
 
+  $BF08 : Kills the current task. Can be called with JP or CALL, since the current task
+          will be killed and its resources freed.
+
 
 ## TODO
 

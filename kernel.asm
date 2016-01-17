@@ -1,6 +1,6 @@
-	defc PRSIZE=32 ; size for each process table entry
-	defc MAXPR=8 ; maximum number of processes
-	defc PRTABLE=$BE00-(PRSIZE*MAXPR) ; address of the process table
+	defc PRSIZE  = 32 ; size for each process table entry
+	defc MAXPR   = 8 ; maximum number of processes
+	defc PRTABLE = $BE00-(PRSIZE*MAXPR) ; address of the process table
 
 	defc REGISTERS = 12 ; number of bytes used to store the registers
 	                    ; when entering the task manager.
@@ -45,6 +45,7 @@
 ;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
 ; Stack         (up to the end)
 
+; pauses the current task and jumps to the next one
 .SWAPTASK	DI
 	PUSH AF
 	PUSH BC
@@ -73,7 +74,7 @@
 	LD BC,(TMPSP)
 	LD (IY+1),C
 	LD (IY+2),B
-	CALL FINDNEXT
+.STARTINT2	CALL FINDNEXT
 	JP NC,INTP2
 	LD IY,PRTABLE
 	LD B,MAXPR
@@ -221,9 +222,14 @@
 	POP IY
 	RET
 
+; ends the current task, freeing all its resources
+.ENDTASK	DI
+	LD IY,(CTABLE)
+	LD A,$FF
+	LD (IY+0),A
+	JP STARTINT2
 
 .MAIN_START	DI
-
 	LD HL,$BE00
 	LD DE,$BE01
 	LD BC,$100
@@ -286,6 +292,7 @@
 
 .CBTABLE	JP SETBANK
 	JP NEWTASK
+	JP ENDTASK
 .CBTABLE2	defb 0
 
 
@@ -319,6 +326,7 @@
 	CP 0
 	JR NZ,TEST6
 	SET 1,C
+	JP $BF08
 .TEST6	CALL PRINTBALL
 	LD B,3
 .TEST7	DI
