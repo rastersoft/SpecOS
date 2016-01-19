@@ -71,6 +71,7 @@ format:
                      can; if it is 0, it will run only if it receives a signal
                      which is enabled in this mask
               bit 7: wait_next_loop. This is used to implement Round-Robin
+     1 byte:  PID for this task. Used to identify it and its resources.
      X bytes: task's stack
 
 The location of this list is set in the source code with the PRTABLE definition.
@@ -101,8 +102,8 @@ The current functions are the follow ones:
           when calling this function.
           Returns C unset if all went fine; C set if there are no more tasks available
 
-  $BF08 : Kills the current task. Can be called with JP or CALL, since the current task
-          will be killed and its resources freed.
+  $BF08 : Kills the task with the PID specified in the A register, and frees all
+          its resources. If the PID is 0, the current task will be killed.
 
 
 ## TODO

@@ -224,13 +224,42 @@
 	POP IY
 	RET
 
-; ends the current task, freeing all its resources
+; ends the task specified in register A (or the current one if A=0), freeing all its resources
 .ENDTASK	DI
+	PUSH IY
+	PUSH DE
+	PUSH BC
 	LD IY,(CTABLE)
+	CP (IY+5)           ; Check if the task's PID being killed is the currently one active
+	JR Z,ENDCURRENT
+	CP 0                ; Check if the specified PID is 0, which means "kill me"
+	JR NZ,ENDNOTCURRENT
+.ENDCURRENT	CALL FREETASK
+	JP STARTINT2        ; Jump to the next available task
+.ENDNOTCURRENT	CP MAXPR
+	JP NC,ENDRET        ; Return if value in A is too big
+	LD IY,PRTABLE-PRSIZE
+	LD B,A
+	LD DE,PRSIZE
+.ENDLOOP	ADD IY,DE
+	DJNZ ENDLOOP
+	CALL FREETASK
+.ENDRET	POP BC
+	POP DE
+	POP IY
+	EI
+	RET
+	
+
+; frees the resources for the task pointed by IY
+.FREETASK	PUSH AF
 	LD A,$FF
 	LD (IY+0),A
-	JP STARTINT2
+	POP AF
+	RET
 
+
+; Initializates everything
 .MAIN_START	DI
 	LD HL,$BE00
 	LD DE,$BE01
@@ -306,7 +335,7 @@
 .CBTABLE2	defb 0
 
 
-; BOUNCES A BALL
+; BOUNCES A BALL, AND KILLS THE TASK WHEN IT BOUNCES IN THE LEFT BORDER
 .TESTTASK	PUSH DE
 	POP HL
 .TESTLOOP	CALL DELBALL
@@ -336,7 +365,8 @@
 	CP 0
 	JR NZ,TEST6
 	SET 1,C
-	JP $BF08
+	XOR A,0             ; Kill the current task when the ball bounces the left border
+	CALL $BF08
 .TEST6	CALL PRINTBALL
 	LD B,3
 .TEST7	DI
