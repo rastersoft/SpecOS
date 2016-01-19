@@ -8,14 +8,14 @@
 
 	org $5B00
 	JP MAIN_START
-.TMPSP	defw 0      ; to temporary store an SP register, since there is only LD (nn),SP instruction
+.TMPSP	defw 0              ; to temporary store an SP register, since there is only LD (nn),SP instruction
 
-.IDLETASK	defb 0      ; this is a false entry for an idle task, called when no task is ready
+.IDLETASK	defb 0              ; this is a false entry for an idle task, called when no task is ready
 	defw IDLESP
 	defb 0
 	defb 0
-	defb 0      ; PID is 0
-	defw 0      ; 16 bytes for stack
+	defb 0              ; PID is 0
+	defw 0              ; 16 bytes for stack
 	defw 0
 	defw 0
 .IDLESP	defw 0
@@ -28,9 +28,9 @@
 	defs 48,0
 
 .IDLECODE	LD A,7
-	OUT (254),A ; A red border will show the current load of the processor
+	OUT (254),A         ; A red border will show the current load of the processor
 	HALT
-	JR IDLECODE ; just wait for an interrupt forever
+	JR IDLECODE         ; just wait for an interrupt forever
 
 ; Data stored in each entry in the process table
 ; Memory page   (1 byte)  // last value sent to 7FFD; FF means this entry is empty
@@ -60,14 +60,14 @@
 	PUSH DE
 	PUSH HL
 	LD A,2
-	OUT (254),A  ; set border to RED color during workload. The IDLE task will put it to WHITE, showing the CPU usage
+	OUT (254),A         ; set border to RED color during workload. The IDLE task will put it to WHITE, showing the CPU usage
 	PUSH IX
 	LD IX,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
 .INTP4	BIT 0,(IX+4)
 	JR Z,INTP5
-	SET 0,(IX+3) ; set the 50Hz bit only if this task is waiting for it
+	SET 0,(IX+3)        ; set the 50Hz bit only if this task is waiting for it
 .INTP5	ADD IX,DE
 	DJNZ INTP4
 	POP IX
@@ -80,7 +80,7 @@
 	LD IY,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
-.INTP3	SET 7,(IY+3) ; enable the round-robin bit
+.INTP3	SET 7,(IY+3)        ; enable the round-robin bit
 	ADD IY,DE
 	DJNZ INTP3
 	CALL FINDNEXT
@@ -88,8 +88,8 @@
 	LD IY,IDLETASK
 .INTP2	LD A,(IY+0)
 	LD BC,$7FFD
-	OUT (C),A ; set page used by this task
-	RES 7,(IY+3) ; reset the round-robin bit (this task has run this round)
+	OUT (C),A           ; set page used by this task
+	RES 7,(IY+3)        ; reset the round-robin bit (this task has run this round)
 	LD L,(IY+1)
 	LD H,(IY+2)
 	LD SP,HL
@@ -105,14 +105,14 @@
 	LD B,MAXPR
 .INTLOOP1	LD A,(IY+0)
 	CP A,$FF
-	JP Z,INTNFOUND ; If it is FF, its an empty entry
+	JP Z,INTNFOUND      ; If it is FF, its an empty entry
 	BIT 6,(IY+3)
-	JR Z,INTNFOUND ; If bit 0 is 0, this process is paused and should not run
+	JR Z,INTNFOUND      ; If bit 0 is 0, this process is paused and should not run
 	BIT 7,(IY+3)
-	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
+	JR Z,INTNFOUND      ; If round-robin bit is 0, this process has run this loop
 	LD A,(IY+3)
 	AND (IY+4)
-	AND $7F        ; Don't check the round-robin bit here
+	AND $7F             ; Don't check the round-robin bit here
 	JR Z,INTNFOUND
 	LD A,$C0
 	LD (IY+3),A
@@ -147,7 +147,7 @@
 	POP AF
 	AND $07
 	OR $10
-	LD (IY+0),A       ; store the currently used page in the current task entry
+	LD (IY+0),A         ; store the currently used page in the current task entry
 	LD BC,$7FFD
 	OUT (C),A
 	POP BC
@@ -162,8 +162,8 @@
 	PUSH BC
 	PUSH DE
 	PUSH AF
-	LD IX,PRTABLE  ; process table address
-	LD B,MAXPR     ; search process table for an empty entry
+	LD IX,PRTABLE       ; process table address
+	LD B,MAXPR          ; search process table for an empty entry
 	LD DE,PRSIZE
 .NPRLOOP	LD A,(IX+0)
 	CP A,$FF
@@ -171,50 +171,50 @@
 	ADD IX,DE
 	DJNZ NPRLOOP
 	SCF
-	LD A,1         ; No more free tasks
+	LD A,1              ; No more free tasks
 	POP AF
 	POP DE
 	POP BC
 	POP IX
 	RET
 .FND_FREE	XOR A
-	LD (IX+0),A    ; Page 0
+	LD (IX+0),A         ; Page 0
 	PUSH HL
 	POP BC
 	LD HL,PRSIZE-1
 	PUSH IX
 	POP DE
 	ADD HL,DE
-	LD (HL),B      ; "Push" the run address in the stack
+	LD (HL),B           ; "Push" the run address in the stack
 	DEC HL
 	LD (HL),C
 	DEC HL
-	POP DE         ; Original value of AF
-	LD (HL),D      ; "Push" AF
+	POP DE              ; Original value of AF
+	LD (HL),D           ; "Push" AF
 	DEC HL
 	LD (HL),E
 	DEC HL
 	POP DE
 	POP BC
 	PUSH BC
-	PUSH DE        ; Recover values for BC and DE
-	LD (HL),B      ; "Push" BC
+	PUSH DE             ; Recover values for BC and DE
+	LD (HL),B           ; "Push" BC
 	DEC HL
 	LD (HL),C
 	DEC HL
-	LD (HL),D      ; "Push" DE
+	LD (HL),D           ; "Push" DE
 	DEC HL
 	LD (HL),E
 	LD HL,PRSIZE-REGISTERS
 	PUSH IX
 	POP DE
 	ADD HL,DE
-	LD (IX+1),L    ; Stack address
+	LD (IX+1),L         ; Stack address
 	LD (IX+2),H
-	LD A,$C0       ; Round-robin and run bits enabled
+	LD A,$C0            ; Round-robin and run bits enabled
 	LD (IX+3),A
 	LD (IX+4),A
-	XOR A          ; NO ERROR
+	XOR A               ; No error
 	POP DE
 	POP BC
 	POP IX
@@ -257,7 +257,7 @@
 ; waits for an event. The event mask is passed in A
 .WAITEVENT	DI
 	PUSH AF
-	AND $3F      ; Pause the process
+	AND $3F             ; Pause the process
 	LD (IY+4),A
 	POP AF
 	JP SWAPTASK
@@ -270,7 +270,7 @@
 	PUSH AF
 	INC DE
 	INC DE
-	INC DE           ; Take into account the extra three bytes needed
+	INC DE              ; Take into account the extra three bytes needed
 	PUSH BC
 	PUSH HL
 	LD A,0
@@ -285,18 +285,18 @@
 .CHECK_FREE	LD BC,$7FFD
 	AND $07
 	OR $10
-	OUT (C),A     ; set the desired memory page
+	OUT (C),A           ; set the desired memory page
 	LD IX,$C000
 .CHECK_FREE1	LD A,(IX+0)
 	CP A,$FF
 	SCF
-	RET Z         ; End of list
+	RET Z               ; End of list
 	LD L,(IX+1)
 	LD H,(IX+2)
-	CP A,0        ; Free block?
+	CP A,0              ; Free block?
 	JR NZ,CHECK_FREE2
-	AND A         ; Unset carry flag
-	SBC HL,DE     ; Check if in this free block 
+	AND A               ; Unset carry flag
+	SBC HL,DE           ; Check if in this free block 
 .CHECK_FREE2	ADD IX,HL
 	
 	
@@ -322,25 +322,25 @@
 ; Initializates everything
 .MAIN_START	DI
 
-	LD HL,IDLECODE    ; Set the stack in FREEZONE to allow to change
-	LD SP,HL          ; the page at $C000-FFFF
+	LD HL,IDLECODE      ; Set the stack in FREEZONE to allow to change
+	LD SP,HL            ; the page at $C000-FFFF
 
 	LD HL,$BE00
 	LD DE,$BE01
 	LD BC,$100
 	LD (HL),$5B
-	LDIR              ; Create a table with 257 "$5B" values
+	LDIR                ; Create a table with 257 "$5B" values
 
 	LD HL,PRTABLE
 	LD DE,PRTABLE+1
 	LD BC,PRSIZE*MAXPR-1
 	LD (HL),$FF
-	LDIR              ; Set process table contents to $FF
+	LDIR                ; Set process table contents to $FF
 	LD IX,PRTABLE
 	LD DE,PRSIZE
 	LD B,MAXPR
-	LD A,1            ; First PID will be 1
-.PIDLOOP	LD (IX+5),A       ; Set the PID (which will be associated with the possition in the task table)
+	LD A,1              ; First PID will be 1
+.PIDLOOP	LD (IX+5),A         ; Set the PID (which will be associated with the possition in the task table)
 	INC A
 	ADD IX,DE
 	DJNZ PIDLOOP
@@ -348,7 +348,7 @@
 	LD HL,CBTABLE
 	LD DE,$BF02
 	LD BC,CBTABLE2-CBTABLE
-	LDIR              ; Copy the callback table
+	LDIR                ; Copy the callback table
 
 	LD A,1
 	CALL INIT_MEMORY
@@ -359,8 +359,8 @@
 	LD A,6
 	CALL INIT_MEMORY
 	LD A,7
-	CALL INIT_MEMORY ; Pages 2 and 5 aren't initializated because
-	                 ; they are used in other parts
+	CALL INIT_MEMORY    ; Pages 2 and 5 aren't initializated because
+	                    ; they are used in other parts
 	LD A,0
 	CALL INIT_MEMORY
 
