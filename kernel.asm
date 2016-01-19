@@ -8,8 +8,6 @@
 
 	org $5B00
 	JP MAIN_START
-.TMPSP	defw 0      ; to temporary store an SP register, since there is only LD (nn),SP instruction
-
 .IDLETASK	defb 0      ; this is a false entry for an idle task, called when no task is ready
 	defw IDLESP
 	defb 0
@@ -25,7 +23,7 @@
 	defw IDLECODE
 
 .DBG	defw 16384
-	defs 48,0
+	defs 50,0
 
 .IDLECODE	LD A,7
 	OUT (254),A ; A red border will show the current load of the processor
@@ -71,10 +69,10 @@
 .INTP5	ADD IX,DE
 	DJNZ INTP4
 	POP IX
-.STARTINT	LD (TMPSP),SP
-	LD BC,(TMPSP)
-	LD (IY+1),C
-	LD (IY+2),B
+.STARTINT	LD HL,0
+	ADD HL,SP      ; Get SP at HL
+	LD (IY+1),L
+	LD (IY+2),H
 .STARTINT2	CALL FINDNEXT
 	JP NC,INTP2
 	LD IY,PRTABLE
