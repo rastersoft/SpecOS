@@ -261,10 +261,70 @@
 	LD (IY+4),A
 	POP AF
 	JP SWAPTASK
+
+; Allocates a block of memory and returns a pointer to it in 
+; The desired size must be passed in DE, and must be smaller than 16381
+; If there is not enough free memory, will return with carry flag set
+.MALLOC	DI
+	PUSH DE
+	PUSH AF
+	INC DE
+	INC DE
+	INC DE           ; Take into account the extra three bytes needed
+	PUSH BC
+	PUSH HL
+	LD A,0
+	CALL CHECK_FREE
+	JR NC,DO_MALLOC
+	
+.DO_MALLOC	RET
+
+; Checks the page passed in A if there is free space enough to fulfill DE bytes
+; If true, returns at IX the address for the block; if not, will return with carry
+; flag set
+.CHECK_FREE	LD BC,$7FFD
+	AND $07
+	OR $10
+	OUT (C),A     ; set the desired memory page
+	LD IX,$C000
+.CHECK_FREE1	LD A,(IX+0)
+	CP A,$FF
+	SCF
+	RET Z         ; End of list
+	LD L,(IX+1)
+	LD H,(IX+2)
+	CP A,0        ; Free block?
+	JR NZ,CHECK_FREE2
+	AND A         ; Unset carry flag
+	SBC HL,DE     ; Check if in this free block 
+.CHECK_FREE2	ADD IX,HL
+	
+	
+
+; Initalizates the blocks in each memory page
+; Each block contains, at the start, a table:
+
+;    1 byte  : owner's PID (or 0 for a free block, or FF for last entry in list)
+;    2 bytes : block size
+
+; Blocks are arranged as a linked list, and ends with an FF byte
+.INIT_MEMORY	LD BC,$7FFD
+	OUT (C),A
+	XOR A
+	LD ($C000),A
+	LD BC,$3FFC
+	LD ($C001),BC
+	LD A,$FF
+	LD ($FFFF),A
+	RET
 	
 
 ; Initializates everything
 .MAIN_START	DI
+
+	LD HL,IDLECODE    ; Set the stack in FREEZONE to allow to change
+	LD SP,HL          ; the page at $C000-FFFF
+
 	LD HL,$BE00
 	LD DE,$BE01
 	LD BC,$100
@@ -289,6 +349,20 @@
 	LD DE,$BF02
 	LD BC,CBTABLE2-CBTABLE
 	LDIR              ; Copy the callback table
+
+	LD A,1
+	CALL INIT_MEMORY
+	LD A,3
+	CALL INIT_MEMORY
+	LD A,4
+	CALL INIT_MEMORY
+	LD A,6
+	CALL INIT_MEMORY
+	LD A,7
+	CALL INIT_MEMORY ; Pages 2 and 5 aren't initializated because
+	                 ; they are used in other parts
+	LD A,0
+	CALL INIT_MEMORY
 
 	LD HL,TESTTASK
 	LD DE,$0505
