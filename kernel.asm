@@ -37,12 +37,12 @@
 ; Stack Pointer (2 bytes)
 ; Wakeup Bits   (1 byte)  // each bit is put to 1 when that condition is received, and compared with the Wakeup Mask
 ;    6 Run/Pause          // 0 if the process is paused, and 1 if it should run (but can be waiting for another signal if the Mask bit 6 is 0)
+;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
 ; Wakeup Mask   (1 byte)
 ;    0 Interrupt 50Hz     // if 1, wait for 50Hz interrupt
 ;    1 Message received   // if 1, wait for a message arriving
 ;    2 Key pressed        // if 1, wait for a keypress
 ;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
-;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
 ; PID
 ; Stack         (up to the end)
 
@@ -80,7 +80,7 @@
 	LD IY,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
-.INTP3	SET 7,(IY+4) ; reset the round-robin bit
+.INTP3	SET 7,(IY+3) ; enable the round-robin bit
 	ADD IY,DE
 	DJNZ INTP3
 	CALL FINDNEXT
@@ -89,7 +89,7 @@
 .INTP2	LD A,(IY+0)
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
-	RES 7,(IY+4)
+	RES 7,(IY+3) ; reset the round-robin bit (this task has run this round)
 	LD L,(IY+1)
 	LD H,(IY+2)
 	LD SP,HL
@@ -108,7 +108,7 @@
 	JP Z,INTNFOUND ; If it is FF, its an empty entry
 	BIT 6,(IY+3)
 	JR Z,INTNFOUND ; If bit 0 is 0, this process is paused and should not run
-	BIT 7,(IY+4)
+	BIT 7,(IY+3)
 	JR Z,INTNFOUND ; If round-robin bit is 0, this process has run this loop
 	LD A,(IY+3)
 	AND (IY+4)
@@ -254,6 +254,14 @@
 	POP AF
 	RET
 
+; waits for an event. The event mask is passed in A
+.WAITEVENT	DI
+	PUSH AF
+	AND $3F      ; Pause the process
+	LD (IY+4),A
+	POP AF
+	JP SWAPTASK
+	
 
 ; Initializates everything
 .MAIN_START	DI
@@ -328,6 +336,7 @@
 .CBTABLE	JP SETBANK
 	JP NEWTASK
 	JP ENDTASK
+	JP WAITEVENT
 .CBTABLE2	defb 0
 
 
@@ -363,10 +372,8 @@
 	SET 1,C
 .TEST6	CALL PRINTBALL
 	LD B,3
-.TEST7	DI
-	SET 0,(IY+4) ; Wait for the 50Hz signal
-	RES 6,(IY+4) ; Pause it
-	CALL SWAPTASK
+	LD A,1
+.TEST7	CALL $BF0B
 	DJNZ TEST7
 	JR TESTLOOP
 

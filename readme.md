@@ -63,17 +63,19 @@ format:
      2 bytes: stack point address
      1 byte:  signal bits. Every time a task receives a signal, the corresponding
               signal bit is set here. The bit 6 has an special meaning: if it is
-              0, this task is paused and won't run (even if it receives a signal).
-              If it is 1, it can run, depending on bit 6 of the signal mask.
-     1 byte:  signal mask. This task will be wake up only when it receives a
-              signal which is marked in this mask
+              0, this task is fully paused and won't run (even if it receives a
+              signal). If it is 1, it can run, depending on bit 6 of the signal
+              mask. It is equivalent to SIGSTOP in UNIX. The bit 7 also has an
+              special meaning: it is used to implement a round-robin scheme, so
+              it must not be modified in the tasks.
+     1 byte:  signal mask. This task will be wake up only when it receives any of
+              the signals enabled in this mask
               bit 0: 50Hz signal
               bit 1: message received
               bit 2: key pressed
               bit 6: run/wait signal. If it is 1, this task will run whenever it
-                     can; if it is 0, it will run only if it receives a signal
-                     which is enabled in this mask
-              bit 7: wait_next_loop. This is used to implement Round-Robin
+                     can; if it is 0, it will run only if it receives one of the
+                     signals enabled in this mask
      1 byte:  PID for this task. Used to identify it and its resources.
      X bytes: task's stack
 
@@ -108,10 +110,12 @@ The current functions are the follow ones:
   $BF08 : Kills the task with the PID specified in the A register, and frees all
           its resources. If the PID is 0, the current task will be killed.
 
+  $BF0B : Waits for a signal to happen. The signal mask is passed in the A register,
+          and follows the list for the *signal mask* field in the task list. Only
+          the first six bits are honored; the 6 and 7 bits aren't.
 
 ## TODO
 
- * Functions for waiting for an specific event
  * Memory management (malloc et al.)
  * Add a messaging system to allow IPC comunication
  * Read keyboard and mouse
