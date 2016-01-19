@@ -25,6 +25,9 @@ quarters of the memory). The fourth quarter is reserved for data, because is
 where the paging mechanism allows to put any of the available pages. This model
 presumes that there is much more data than code in the programs.
 
+The IY register contains always the address of the current task's entry in the
+task list. It must not be modified by the tasks.
+
     +----------+
     |  Data    |
     |          |

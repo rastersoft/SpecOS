@@ -2,13 +2,12 @@
 	defc MAXPR   = 8 ; maximum number of processes
 	defc PRTABLE = $BE00-(PRSIZE*MAXPR) ; address of the process table
 
-	defc REGISTERS = 12 ; number of bytes used to store the registers
+	defc REGISTERS = 10 ; number of bytes used to store the registers
 	                    ; when entering the task manager.
-	                    ; Currently AF, BC, DE, HL, IY and the return address
+	                    ; Currently AF, BC, DE, HL and the return address
 
 	org $5B00
 	JP MAIN_START
-.CTABLE	defw 0      ; pointer to the current process table
 .TMPSP	defw 0      ; to temporary store an SP register, since there is only LD (nn),SP instruction
 
 .IDLETASK	defb 0      ; this is a false entry for an idle task, called when no task is ready
@@ -18,15 +17,15 @@
 	defb 0      ; PID is 0
 	defw 0      ; 16 bytes for stack
 	defw 0
-.IDLESP	defw 0
 	defw 0
+.IDLESP	defw 0
 	defw 0
 	defw 0
 	defw 0
 	defw IDLECODE
 
 .DBG	defw 16384
-	defs 44,0
+	defs 48,0
 
 .IDLECODE	LD A,7
 	OUT (254),A ; A red border will show the current load of the processor
@@ -53,26 +52,26 @@
 	PUSH BC
 	PUSH DE
 	PUSH HL
-	PUSH IY
 	JR STARTINT
 ; interrupt routine; do not relocate (must be at 5B5B)
+; IY is reserved for pointing to the current task entry. Must not be modified in the tasks
 .INTINIT	PUSH AF
 	PUSH BC
 	PUSH DE
 	PUSH HL
-	PUSH IY
 	LD A,2
 	OUT (254),A  ; set border to RED color during workload. The IDLE task will put it to WHITE, showing the CPU usage
-	LD IY,PRTABLE
+	PUSH IX
+	LD IX,PRTABLE
 	LD B,MAXPR
 	LD DE,PRSIZE
-.INTP4	BIT 0,(IY+4)
+.INTP4	BIT 0,(IX+4)
 	JR Z,INTP5
-	SET 0,(IY+3) ; set the 50Hz bit only if this task is waiting for it
-.INTP5	ADD IY,DE
+	SET 0,(IX+3) ; set the 50Hz bit only if this task is waiting for it
+.INTP5	ADD IX,DE
 	DJNZ INTP4
-.STARTINT	LD IY,(CTABLE)
-	LD (TMPSP),SP
+	POP IX
+.STARTINT	LD (TMPSP),SP
 	LD BC,(TMPSP)
 	LD (IY+1),C
 	LD (IY+2),B
@@ -90,13 +89,11 @@
 .INTP2	LD A,(IY+0)
 	LD BC,$7FFD
 	OUT (C),A ; set page used by this task
-	LD (CTABLE),IY
 	RES 7,(IY+4)
 	LD L,(IY+1)
 	LD H,(IY+2)
 	LD SP,HL
-.INTEND	POP IY
-	POP HL
+.INTEND	POP HL
 	POP DE
 	POP BC
 	POP AF
@@ -119,7 +116,7 @@
 	JR Z,INTNFOUND
 	LD A,$C0
 	LD (IY+3),A
-	LD (IY+4),A    ; Remove the mask conditions and the signals
+	LD (IY+4),A
 	RET
 .INTNFOUND	LD DE,PRSIZE
 	ADD IY,DE
@@ -150,8 +147,7 @@
 	POP AF
 	AND $07
 	OR $10
-	LD BC,(CTABLE)
-	LD (BC),A       ; store the currently used page in the current task entry
+	LD (IY+0),A       ; store the currently used page in the current task entry
 	LD BC,$7FFD
 	OUT (C),A
 	POP BC
@@ -162,31 +158,31 @@
 ; Creates a new task. Receives in HL the address where the code is.
 ; The task will receive the values for AF, BC and DE passed when calling this function
 ; Returns C unset if all went fine; C set if there are no more tasks available
-.NEWTASK	PUSH IY
+.NEWTASK	PUSH IX
 	PUSH BC
 	PUSH DE
 	PUSH AF
-	LD IY,PRTABLE  ; process table address
+	LD IX,PRTABLE  ; process table address
 	LD B,MAXPR     ; search process table for an empty entry
 	LD DE,PRSIZE
-.NPRLOOP	LD A,(IY+0)
+.NPRLOOP	LD A,(IX+0)
 	CP A,$FF
 	JR Z,FND_FREE
-	ADD IY,DE
+	ADD IX,DE
 	DJNZ NPRLOOP
 	SCF
 	LD A,1         ; No more free tasks
 	POP AF
 	POP DE
 	POP BC
-	POP IY
+	POP IX
 	RET
 .FND_FREE	XOR A
-	LD (IY+0),A    ; Page 0
+	LD (IX+0),A    ; Page 0
 	PUSH HL
 	POP BC
 	LD HL,PRSIZE-1
-	PUSH IY
+	PUSH IX
 	POP DE
 	ADD HL,DE
 	LD (HL),B      ; "Push" the run address in the stack
@@ -210,51 +206,51 @@
 	DEC HL
 	LD (HL),E
 	LD HL,PRSIZE-REGISTERS
-	PUSH IY
+	PUSH IX
 	POP DE
 	ADD HL,DE
-	LD (IY+1),L    ; Stack address
-	LD (IY+2),H
+	LD (IX+1),L    ; Stack address
+	LD (IX+2),H
 	LD A,$C0       ; Round-robin and run bits enabled
-	LD (IY+3),A
-	LD (IY+4),A
+	LD (IX+3),A
+	LD (IX+4),A
 	XOR A          ; NO ERROR
 	POP DE
 	POP BC
-	POP IY
+	POP IX
 	RET
 
 ; ends the task specified in register A (or the current one if A=0), freeing all its resources
 .ENDTASK	DI
-	PUSH IY
+	PUSH IX
 	PUSH DE
 	PUSH BC
-	LD IY,(CTABLE)
 	CP (IY+5)           ; Check if the task's PID being killed is the currently one active
 	JR Z,ENDCURRENT
 	CP 0                ; Check if the specified PID is 0, which means "kill me"
 	JR NZ,ENDNOTCURRENT
-.ENDCURRENT	CALL FREETASK
+.ENDCURRENT	PUSH IY
+	POP IX
+	CALL FREETASK
 	JP STARTINT2        ; Jump to the next available task
 .ENDNOTCURRENT	CP MAXPR
 	JP NC,ENDRET        ; Return if value in A is too big
-	LD IY,PRTABLE-PRSIZE
+	LD IX,PRTABLE-PRSIZE
 	LD B,A
 	LD DE,PRSIZE
-.ENDLOOP	ADD IY,DE
+.ENDLOOP	ADD IX,DE
 	DJNZ ENDLOOP
 	CALL FREETASK
 .ENDRET	POP BC
 	POP DE
-	POP IY
+	POP IX
 	EI
 	RET
 	
-
-; frees the resources for the task pointed by IY
+; frees the resources for the task pointed by IX
 .FREETASK	PUSH AF
 	LD A,$FF
-	LD (IY+0),A
+	LD (IX+0),A
 	POP AF
 	RET
 
@@ -272,13 +268,13 @@
 	LD BC,PRSIZE*MAXPR-1
 	LD (HL),$FF
 	LDIR              ; Set process table contents to $FF
-	LD IY,PRTABLE
+	LD IX,PRTABLE
 	LD DE,PRSIZE
 	LD B,MAXPR
 	LD A,1            ; First PID will be 1
-.PIDLOOP	LD (IY+5),A       ; Set the PID (which will be associated with the possition in the task table)
+.PIDLOOP	LD (IX+5),A       ; Set the PID (which will be associated with the possition in the task table)
 	INC A
-	ADD IY,DE
+	ADD IX,DE
 	DJNZ PIDLOOP
 
 	LD HL,CBTABLE
@@ -368,7 +364,6 @@
 .TEST6	CALL PRINTBALL
 	LD B,3
 .TEST7	DI
-	LD IY,(CTABLE)
 	SET 0,(IY+4) ; Wait for the 50Hz signal
 	RES 6,(IY+4) ; Pause it
 	CALL SWAPTASK
