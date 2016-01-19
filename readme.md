@@ -112,7 +112,8 @@ The current functions are the follow ones:
 
   $BF0B : Waits for a signal to happen. The signal mask is passed in the A register,
           and follows the list for the *signal mask* field in the task list. Only
-          the first six bits are honored; the 6 and 7 bits aren't.
+          the first six bits are honored; the 6 and 7 bits aren't. When this function
+          returns, the process is unpaused and the signal mask is erased.
 
 ## TODO
 
