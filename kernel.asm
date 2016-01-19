@@ -8,14 +8,15 @@
 
 	org $5B00
 	JP MAIN_START
-.CTABLE	defw 0     ; pointer to the current process table
-.TMPSP	defw 0     ; to temporary store an SP register, since there is only LD (nn),SP instruction
+.CTABLE	defw 0      ; pointer to the current process table
+.TMPSP	defw 0      ; to temporary store an SP register, since there is only LD (nn),SP instruction
 
-.IDLETASK	defb 0     ; this is a false entry for an idle task, called when no task is ready
+.IDLETASK	defb 0      ; this is a false entry for an idle task, called when no task is ready
 	defw IDLESP
 	defb 0
 	defb 0
-	defw 0  ; 16 bytes for stack
+	defb 0      ; PID is 0
+	defw 0      ; 16 bytes for stack
 	defw 0
 .IDLESP	defw 0
 	defw 0
@@ -25,7 +26,7 @@
 	defw IDLECODE
 
 .DBG	defw 16384
-	defs 45,0
+	defs 44,0
 
 .IDLECODE	LD A,7
 	OUT (254),A ; A red border will show the current load of the processor
@@ -43,6 +44,7 @@
 ;    2 Key pressed        // if 1, wait for a keypress
 ;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
 ;    7 Wait_next_loop     // used to implement round-robin calling scheme; must be 1 by default
+; PID
 ; Stack         (up to the end)
 
 ; pauses the current task and jumps to the next one
@@ -241,6 +243,14 @@
 	LD BC,PRSIZE*MAXPR-1
 	LD (HL),$FF
 	LDIR              ; Set process table contents to $FF
+	LD IY,PRTABLE
+	LD DE,PRSIZE
+	LD B,MAXPR
+	LD A,1            ; First PID will be 1
+.PIDLOOP	LD (IY+5),A       ; Set the PID (which will be associated with the possition in the task table)
+	INC A
+	ADD IY,DE
+	DJNZ PIDLOOP
 
 	LD HL,CBTABLE
 	LD DE,$BF02
