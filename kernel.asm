@@ -125,29 +125,24 @@
 ; Sets a memory bank from a memory pointer.
 ; Receives a memory pointer in HL; sets the memory bank and returns in HL the memory address
 ; Pointer format:   bcxxxxxx xxxxxxxa
-; being abc three bits defining the RAM page where the pointer is located, and xxxxxxxxxxxxxxx0 the pointer itself.
+; being **abc** three bits defining the RAM page where the pointer is located, and **11xxxxxxxxxxxxx1** the pointer itself.
 .SETBANK	PUSH AF
 	PUSH BC
+	PUSH HL
 	LD A,L
 	RLC H
 	RLA
 	RLC H
 	RLA
-	RRC H
-	RRC H
-	PUSH AF
-	LD A,H
-	AND $3F
-	LD H,A
-	LD A,L
-	AND $FE
-	LD L,A
-	POP AF
 	AND $07
 	OR $10
 	LD (IY+0),A         ; store the currently used page in the current task entry
 	LD BC,$7FFD
 	OUT (C),A
+	SET 6,H
+	SET 7,H
+	SET 0,L             ; a pointer is always odd, and have the bits 14 and 15 to 1 (is located at segment 4)
+	POP HL
 	POP BC
 	POP AF
 	RET
@@ -169,13 +164,13 @@
 	ADD IX,DE
 	DJNZ NPRLOOP
 	SCF
-	LD A,1              ; No more free tasks
 	POP AF
+	LD A,1              ; No more free tasks
 	POP DE
 	POP BC
 	POP IX
 	RET
-.FND_FREE	XOR A
+.FND_FREE	LD A,$10
 	LD (IX+0),A         ; Page 0
 	PUSH HL
 	POP BC
@@ -260,43 +255,107 @@
 	POP AF
 	JP SWAPTASK
 
-; Allocates a block of memory and returns a pointer to it in 
+; Allocates a block of memory and returns a pointer to it in HL
 ; The desired size must be passed in DE, and must be smaller than 16381
 ; If there is not enough free memory, will return with carry flag set
-.MALLOC	DI
+.MALLOC	PUSH BC
 	PUSH DE
-	PUSH AF
+	PUSH IX
 	INC DE
 	INC DE
 	INC DE              ; Take into account the extra three bytes needed
-	PUSH BC
-	PUSH HL
-	LD A,0
+	SET 0,E             ; Ensure that it is an odd size
+	LD A,$10
 	CALL CHECK_FREE
 	JR NC,DO_MALLOC
-	
-.DO_MALLOC	RET
+	LD A,$11
+	CALL CHECK_FREE
+	JR NC,DO_MALLOC
+	LD A,$13
+	CALL CHECK_FREE
+	JR NC,DO_MALLOC
+	LD A,$14
+	CALL CHECK_FREE
+	JR NC,DO_MALLOC
+	LD A,$16
+	CALL CHECK_FREE
+	JR NC,DO_MALLOC
+	LD A,$17
+	CALL CHECK_FREE
+	JR C,MALLOC_ERROR
+.DO_MALLOC	PUSH AF
+	LD A,(IY+5)         ; Get PID
+	LD (IX+0),A
+	LD L,(IX+1)
+	LD H,(IX+2)         ; Get current block size in HL
+	PUSH DE
+	DEC DE
+	DEC DE
+	DEC DE              ; Store the true size
+	LD (IX+1),E
+	LD (IX+2),D         ; Block size to the desired malloc size
+	POP DE
+	PUSH IX
+	ADD IX,DE           ; Jump to "next block"
+	XOR A
+	SBC HL,DE           ; Substract to the original block size the size taken
+	LD (IX+0),A         ; Free block
+	LD (IX+1),L
+	LD (IX+2),H         ; New size for the free block
+	POP HL
+	INC HL
+	INC HL
+	INC HL              ; Now HL points to the memory block. This adress has 11xxxxxxxxxxxxx1 format
+	POP AF
+	BIT 0,A
+	JR NZ,MALLOC1
+	RES 6,H
+.MALLOC1	BIT 1,A
+	JR NZ,MALLOC2
+	RES 7,H
+.MALLOC2	BIT 2,A
+	JR NZ,MALLOC_RET
+	RES 0,L
+	JR MALLOC_RET
+.MALLOC_ERROR	SCF
+.MALLOC_RET	LD A,(IY+0)         ; restore the memory page in the current task
+	LD BC,$7FFD
+	OUT (C),A
+	POP IX
+	POP DE
+	POP BC
+	RET
 
 ; Checks the page passed in A if there is free space enough to fulfill DE bytes
-; If true, returns at IX the address for the block; if not, will return with carry
+; If true, returns at IX the block address; if not, will return with carry
 ; flag set
-.CHECK_FREE	LD BC,$7FFD
-	AND $07
-	OR $10
+.CHECK_FREE	PUSH HL
+	PUSH AF
+	LD BC,$7FFD
 	OUT (C),A           ; set the desired memory page
 	LD IX,$C000
 .CHECK_FREE1	LD A,(IX+0)
-	CP A,$FF
-	SCF
-	RET Z               ; End of list
-	LD L,(IX+1)
-	LD H,(IX+2)
+	CP $FF
+	JR Z,CHECK_FREE4    ; End of list
+	LD C,(IX+1)
+	LD B,(IX+2)
 	CP A,0              ; Free block?
 	JR NZ,CHECK_FREE2
+	PUSH BC
+	POP HL
 	AND A               ; Unset carry flag
-	SBC HL,DE           ; Check if in this free block 
-.CHECK_FREE2	ADD IX,HL
-	
+	SBC HL,DE           ; Check if in this free block is bigger enough
+	JR NC,CHECK_FREE3   ; If DE is bigger than the block size, try next; if not, this is the block
+.CHECK_FREE2	ADD IX,BC           ; Next block
+	INC IX
+	INC IX
+	INC IX
+	JR CHECK_FREE1
+.CHECK_FREE4	SCF
+.CHECK_FREE3	POP BC
+	LD A,B              ; Recover the memory page without altering the carry flag
+	POP HL
+	RET
 	
 
 ; Initalizates the blocks in each memory page
@@ -348,32 +407,37 @@
 	LD BC,CBTABLE2-CBTABLE
 	LDIR                ; Copy the callback table
 
-	LD A,1
+	LD A,$10
 	CALL INIT_MEMORY
-	LD A,3
+	LD A,$11
 	CALL INIT_MEMORY
-	LD A,4
+	LD A,$13
 	CALL INIT_MEMORY
-	LD A,6
+	LD A,$14
 	CALL INIT_MEMORY
-	LD A,7
+	LD A,$16
+	CALL INIT_MEMORY
+	LD A,$17
 	CALL INIT_MEMORY    ; Pages 2 and 5 aren't initializated because
-	                    ; they are used in other parts
-	LD A,0
-	CALL INIT_MEMORY
+	                    ; they are paged in other zones
 
 	LD HL,TESTTASK
 	LD DE,$0505
 	LD C,0
 	CALL $BF05
+
 	LD DE,$1007
 	LD C,1
 	LD HL,TESTTASK
 	CALL $BF05
+
+	JP I3
+
 	LD DE,$0515
 	LD C,2
 	LD HL,TESTTASK
 	CALL $BF05
+
 	LD DE,$0802
 	LD C,3
 	LD HL,TESTTASK
@@ -399,7 +463,7 @@
 	LD HL,TESTTASK
 	CALL $BF05
 
-	LD A,$BE
+.I3	LD A,$BE
 	LD I,A
 	IM 2
 	EI
@@ -409,11 +473,19 @@
 	JP NEWTASK
 	JP ENDTASK
 	JP WAITEVENT
+	JP MALLOC
 .CBTABLE2	defb 0
 
 
 ; BOUNCES A BALL
 .TESTTASK	PUSH DE
+	LD DE,$3000
+	DI
+	CALL $BF0E
+	EI
+	PUSH HL
+	POP BC
+	CALL DEBUG16
 	POP HL
 .TESTLOOP	CALL DELBALL
 	BIT 0,C
@@ -426,7 +498,7 @@
 	JR TEST3
 .TEST1	DEC H
 	LD A,H
-	CP 0
+	CP 1
 	JR NZ,TEST3
 	SET 0,C
 .TEST3	BIT 1,C
