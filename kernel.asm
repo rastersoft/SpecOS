@@ -139,10 +139,10 @@
 	LD (IY+0),A         ; store the currently used page in the current task entry
 	LD BC,$7FFD
 	OUT (C),A
+	POP HL
 	SET 6,H
 	SET 7,H
 	SET 0,L             ; a pointer is always odd, and have the bits 14 and 15 to 1 (is located at segment 4)
-	POP HL
 	POP BC
 	POP AF
 	RET
@@ -261,10 +261,10 @@
 .MALLOC	PUSH BC
 	PUSH DE
 	PUSH IX
+	SET 0,E             ; Ensure that it is an odd size
 	INC DE
 	INC DE
 	INC DE              ; Take into account the extra three bytes needed
-	SET 0,E             ; Ensure that it is an odd size
 	LD A,$10
 	CALL CHECK_FREE
 	JR NC,DO_MALLOC
@@ -324,6 +324,65 @@
 	POP IX
 	POP DE
 	POP BC
+	RET
+
+; Frees a memory block allocated with malloc
+; Receives in HL a pointer to the block
+.FREE	PUSH HL
+	PUSH AF
+	CALL SETBANK
+	DEC HL
+	DEC HL
+	DEC HL              ; HL now points to the start block
+	XOR A
+	LD (HL),A           ; Free block
+	CALL JOIN_BLOCKS    ; Join free blocks
+	POP AF
+	POP HL
+	RET
+
+; Joins in a single block all free, contiguous memory blocks in the current page
+.JOIN_BLOCKS	PUSH AF
+	PUSH DE
+	PUSH HL
+	PUSH IX
+	LD IX,$C000
+.JOIN1	LD A,(IX+0)
+	CP $FF              ; End of list?
+	JR Z,JOIN_END
+.JOIN3	LD E,(IX+1)
+	LD D,(IX+2)
+	CP 0                ; Free block?
+	JR Z,JOIN2
+	ADD IX,DE
+	INC IX
+	INC IX
+	INC IX              ; Next block
+	JR JOIN1
+.JOIN2	PUSH IX
+	ADD IX,DE
+	INC IX
+	INC IX
+	INC IX              ; Next block
+	LD A,(IX+0)
+	LD L,(IX+1)
+	LD H,(IX+2)
+	CP 0	     ; Next block is free?
+	JR NZ,JOIN4
+	POP IX
+	ADD HL,DE           ; Add both sizes
+	INC HL
+	INC HL
+	INC HL              ; Add the second block's header size
+	LD (IX+1),L
+	LD (IX+2),H         ; Grow the first free block
+	JR JOIN3            ; Continue checking if there are more free blocks
+.JOIN4	POP HL              ; Remove the value in the stack and continue with the next block
+	JR JOIN1
+.JOIN_END	POP IX
+	POP HL
+	POP DE
+	POP AF
 	RET
 
 ; Checks the page passed in A if there is free space enough to fulfill DE bytes
@@ -421,10 +480,10 @@
 	CALL INIT_MEMORY    ; Pages 2 and 5 aren't initializated because
 	                    ; they are paged in other zones
 
-	LD HL,TESTTASK
+	LD HL,TESTTASK2
 	LD DE,$0505
 	LD C,0
-	CALL $BF05
+	CALL $BF05          ; Tests MALLOC and FREE
 
 	LD DE,$1007
 	LD C,1
@@ -446,7 +505,7 @@
 	LD HL,TESTTASK
 	CALL $BF05
 
-	LD DE,$020B
+	LD DE,$090B
 	LD C,0
 	LD HL,TESTTASK
 	CALL $BF05
@@ -472,8 +531,59 @@
 	JP ENDTASK
 	JP WAITEVENT
 	JP MALLOC
+	JP FREE
 .CBTABLE2	defb 0
 
+
+.TESTTASK2	DI
+	CALL SHOWMEM
+	LD DE,1000
+	CALL $BF0E
+	PUSH HL
+	CALL SHOWMEM
+	LD DE,2000
+	CALL $BF0E
+	PUSH HL
+	CALL SHOWMEM
+	POP BC
+	POP HL
+	PUSH BC
+	CALL $BF11
+	CALL SHOWMEM
+	POP HL
+	CALL $BF11
+	CALL SHOWMEM
+	EI
+	XOR A
+	CALL $BF08          ; Kill this task
+.TESTTASK2_1	JR TESTTASK2_1
+
+
+.SHOWMEM	PUSH IX
+	PUSH AF
+	PUSH BC
+	LD IX,$C000
+	LD B,6
+.SHOWMEM1	LD A,(IX+0)
+	CALL DEBUG8
+	CP $FF
+	JR Z,SHOWMEM2
+	PUSH BC
+	LD C,(IX+1)
+	LD B,(IX+2)
+	CALL DEBUG16
+	ADD IX,BC
+	POP BC
+	INC IX
+	INC IX
+	INC IX
+	DJNZ SHOWMEM1
+	LD A,$F0
+	CALL DEBUG8
+.SHOWMEM2	POP BC
+	POP AF
+	POP IX
+	RET
 
 ; BOUNCES A BALL
 .TESTTASK	PUSH DE
@@ -489,7 +599,7 @@
 	JR TEST3
 .TEST1	DEC H
 	LD A,H
-	CP 1
+	CP 2
 	JR NZ,TEST3
 	SET 0,C
 .TEST3	BIT 1,C

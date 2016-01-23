@@ -115,13 +115,15 @@ The current functions are the follow ones:
           the first six bits are honored; the 6 and 7 bits aren't. When this function
           returns, the process is unpaused and the signal mask is erased.
 
-  $BF0E : Malloc; reserves a block of up to 3FFC bytes and return a pointer, which can
+  $BF0E : Malloc; reserves a block of up to 3FFC bytes and return a pointer in HL, which can
           be unfolded with function call $BF02. This block can be in any of the memory
           pages 0, 1, 3, 4, 6 or 7.
 
+  $BF11 : Free; frees a block reserved with Malloc. Receives in HL the pointer returned by
+          malloc.
+
 ## TODO
 
- * Memory management (malloc et al.)
  * Add a messaging system to allow IPC comunication
  * Read keyboard and mouse
  * C library
