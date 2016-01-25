@@ -24,7 +24,7 @@
 
 .SPIN	defb 0              ; Counter for spinlocks and spinunlocks
 .DBG	defw 16384
-	defs 49,0
+	defs 45,0
 
 .IDLECODE	LD A,7
 	OUT (254),A         ; A red border will show the current load of the processor
@@ -42,6 +42,7 @@
 ;    1 Message received   // if 1, wait for a message arriving
 ;    2 Key pressed        // if 1, wait for a keypress
 ;    6 Run/Wait Signal    // if 0, the process is waiting a signal, must not be run unless another signal enables it; if 1, should run
+;    7 High priority      // if 1, will not honor the round-robin bit, being run as soon as possible
 ; PID
 ; Stack         (up to the end)
 
@@ -51,6 +52,8 @@
 	PUSH BC
 	PUSH DE
 	PUSH HL
+	LD A,2
+	OUT (254),A
 	JR STARTINT
 ; interrupt routine; do not relocate (must be at 5B5B)
 ; IY is reserved for pointing to the current task entry. Must not be modified in the tasks
@@ -107,14 +110,19 @@
 	JP Z,INTNFOUND      ; If it is FF, its an empty entry
 	BIT 6,(IY+3)
 	JR Z,INTNFOUND      ; If bit 0 is 0, this process is paused and should not run
+	BIT 7,(IY+4)
+	JR NZ,INTLOOP2      ; If it is high priority, don't check round robin
 	BIT 7,(IY+3)
 	JR Z,INTNFOUND      ; If round-robin bit is 0, this process has run this loop
-	LD A,(IY+3)
+.INTLOOP2	LD A,(IY+3)
 	AND (IY+4)
 	AND $7F             ; Don't check the round-robin bit here
 	JR Z,INTNFOUND
 	LD A,$C0
 	LD (IY+3),A
+	LD A,(IY+4)
+	AND $C0
+	SET 6,A
 	LD (IY+4),A
 	RET
 .INTNFOUND	LD DE,PRSIZE
@@ -209,6 +217,7 @@
 	LD (IX+2),H
 	LD A,$C0            ; Round-robin and run bits enabled
 	LD (IX+3),A
+	LD A,$40            ; Low priority
 	LD (IX+4),A
 	XOR A               ; No error
 	POP DE
@@ -256,7 +265,10 @@
 .WAITEVENT	DI
 	PUSH AF
 	AND $3F             ; Pause the process
-	LD (IY+4),A
+	BIT 7,(IY+4)        ; Keep the high-priority bit
+	JR Z,WAITEVENT2
+	SET 7,A
+.WAITEVENT2	LD (IY+4),A
 	POP AF
 	JP SWAPTASK
 
@@ -510,7 +522,7 @@
 	LD HL,TESTTASK2
 	LD DE,$0505
 	LD C,0
-	CALL $BF05          ; Tests MALLOC and FREE
+	CALL $BF05          ; Tests high priority tasks
 
 	LD DE,$1007
 	LD C,1
@@ -564,55 +576,26 @@
 .CBTABLE2	defb 0
 
 
-.TESTTASK2	CALL SPINLOCK
-	CALL SHOWMEM
-	LD DE,1000
-	CALL $BF0E
-	PUSH HL
-	CALL SHOWMEM
-	LD DE,2000
-	CALL $BF0E
-	PUSH HL
-	CALL SHOWMEM
-	POP BC
-	POP HL
-	PUSH BC
-	CALL $BF11
-	CALL SHOWMEM
-	POP HL
-	CALL $BF11
-	CALL SHOWMEM
-	CALL SPINUNLOCK
-	XOR A
-	CALL $BF08          ; Kill this task
-.TESTTASK2_1	JR TESTTASK2_1
-
-
-.SHOWMEM	PUSH IX
-	PUSH AF
-	PUSH BC
-	LD IX,$C000
-	LD B,6
-.SHOWMEM1	LD A,(IX+0)
-	CALL DEBUG8
-	CP $FF
-	JR Z,SHOWMEM2
-	PUSH BC
-	LD C,(IX+1)
-	LD B,(IX+2)
-	CALL DEBUG16
-	ADD IX,BC
-	POP BC
-	INC IX
-	INC IX
-	INC IX
-	DJNZ SHOWMEM1
-	LD A,$F0
-	CALL DEBUG8
-.SHOWMEM2	POP BC
-	POP AF
-	POP IX
-	RET
+.TESTTASK2	SET 7,(IY+4)        ; This will be a high-priority task
+.TESTTASK2B	LD A,$06
+	LD BC,$FFFE
+	OUT (C),A
+	LD B,255
+.TT2	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	NOP
+	DJNZ TT2
+	LD A,1
+	CALL $BF0B
+	JR TESTTASK2B
 
 ; BOUNCES A BALL
 .TESTTASK	PUSH DE
@@ -645,6 +628,8 @@
 	JR NZ,TEST6
 	SET 1,C
 .TEST6	CALL PRINTBALL
+	HALT
+	JR TESTLOOP
 	LD B,3
 	LD A,1
 .TEST7	CALL $BF0B

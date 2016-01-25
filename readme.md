@@ -65,17 +65,22 @@ format:
               signal bit is set here. The bit 6 has an special meaning: if it is
               0, this task is fully paused and won't run (even if it receives a
               signal). If it is 1, it can run, depending on bit 6 of the signal
-              mask. It is equivalent to SIGSTOP in UNIX. The bit 7 also has an
-              special meaning: it is used to implement a round-robin scheme, so
-              it must not be modified in the tasks.
+              mask. It is equivalent to SIGSTOP in UNIX.
+              The bit 7 also has an special meaning: it is used to implement a
+              round-robin scheme, so it must not be modified in the tasks.
      1 byte:  signal mask. This task will be wake up only when it receives any of
               the signals enabled in this mask
               bit 0: 50Hz signal
               bit 1: message received
-              bit 2: key pressed
               bit 6: run/wait signal. If it is 1, this task will run whenever it
                      can; if it is 0, it will run only if it receives one of the
                      signals enabled in this mask
+              bit 7: high priority. It it is 1, this task will be run as soon as
+                     possible (but if it is paused, will only be waked up if the
+                     right signal arrives). The priority will be given by the PID.
+                     A high priority task which waits for the 50Hz signal should
+                     not last for more than 20ms to avoid monopolizing the processor.
+                     An example of this tasks would be one to read keyboard and mouse.
      1 byte:  PID for this task. Used to identify it and its resources.
      X bytes: task's stack
 
