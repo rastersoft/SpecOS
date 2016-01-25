@@ -22,8 +22,9 @@
 	defw 0
 	defw IDLECODE
 
+.SPIN	defb 0              ; Counter for spinlocks and spinunlocks
 .DBG	defw 16384
-	defs 50,0
+	defs 49,0
 
 .IDLECODE	LD A,7
 	OUT (254),A         ; A red border will show the current load of the processor
@@ -151,7 +152,8 @@
 ; Creates a new task. Receives in HL the address where the code is.
 ; The task will receive the values for AF, BC and DE passed when calling this function
 ; Returns C unset if all went fine; C set if there are no more tasks available
-.NEWTASK	PUSH IX
+.NEWTASK	CALL SPINLOCK
+	PUSH IX
 	PUSH BC
 	PUSH DE
 	PUSH AF
@@ -169,6 +171,7 @@
 	POP DE
 	POP BC
 	POP IX
+	CALL SPINUNLOCK
 	RET
 .FND_FREE	LD A,$10
 	LD (IX+0),A         ; Page 0
@@ -211,10 +214,11 @@
 	POP DE
 	POP BC
 	POP IX
+	CALL SPINUNLOCK
 	RET
 
 ; ends the task specified in register A (or the current one if A=0), freeing all its resources
-.ENDTASK	DI
+.ENDTASK	CALL SPINLOCK
 	PUSH IX
 	PUSH DE
 	PUSH BC
@@ -237,7 +241,7 @@
 .ENDRET	POP BC
 	POP DE
 	POP IX
-	EI
+	CALL SPINUNLOCK
 	RET
 	
 ; frees the resources for the task pointed by IX
@@ -248,6 +252,7 @@
 	RET
 
 ; waits for an event. The event mask is passed in A
+; It presumes that there are no spinlocks remaining to be freed
 .WAITEVENT	DI
 	PUSH AF
 	AND $3F             ; Pause the process
@@ -258,7 +263,8 @@
 ; Allocates a block of memory and returns a pointer to it in HL
 ; The desired size must be passed in DE, and must be smaller than 16381
 ; If there is not enough free memory, will return with carry flag set
-.MALLOC	PUSH BC
+.MALLOC	CALL SPINLOCK
+	PUSH BC
 	PUSH DE
 	PUSH IX
 	SET 0,E             ; Ensure that it is an odd size
@@ -324,11 +330,13 @@
 	POP IX
 	POP DE
 	POP BC
+	CALL SPINUNLOCK
 	RET
 
 ; Frees a memory block allocated with malloc
 ; Receives in HL a pointer to the block
-.FREE	PUSH HL
+.FREE	CALL SPINLOCK
+	PUSH HL
 	PUSH AF
 	CALL SETBANK
 	DEC HL
@@ -339,6 +347,7 @@
 	CALL JOIN_BLOCKS    ; Join free blocks
 	POP AF
 	POP HL
+	CALL SPINUNLOCK
 	RET
 
 ; Joins in a single block all free, contiguous memory blocks in the current page
@@ -415,7 +424,25 @@
 	LD A,B              ; Recover the memory page without altering the carry flag
 	POP HL
 	RET
-	
+
+.SPINLOCK	DI
+	PUSH AF
+	LD A,(SPIN)
+	INC A
+	LD (SPIN),A
+	POP AF
+	RET
+
+.SPINUNLOCK	PUSH AF
+	LD A,(SPIN)
+	AND A
+	JR Z,SPINEND
+	DEC A
+	LD (SPIN),A
+	JR NZ,SPINEND2
+.SPINEND	EI
+.SPINEND2	POP AF
+	RET
 
 ; Initalizates the blocks in each memory page
 ; Each block contains, at the start, a table:
@@ -532,10 +559,12 @@
 	JP WAITEVENT
 	JP MALLOC
 	JP FREE
+	JP SPINLOCK
+	JP SPINUNLOCK
 .CBTABLE2	defb 0
 
 
-.TESTTASK2	DI
+.TESTTASK2	CALL SPINLOCK
 	CALL SHOWMEM
 	LD DE,1000
 	CALL $BF0E
@@ -553,7 +582,7 @@
 	POP HL
 	CALL $BF11
 	CALL SHOWMEM
-	EI
+	CALL SPINUNLOCK
 	XOR A
 	CALL $BF08          ; Kill this task
 .TESTTASK2_1	JR TESTTASK2_1

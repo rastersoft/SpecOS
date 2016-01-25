@@ -89,9 +89,6 @@ There are several functions available for the processes. There are entry points
 located from address $BF02, with each one using 3 bytes. Calling the corresponding
 entry point will call the function.
 
-Before calling these functions it is mandatory to disable interrupts, and enable
-them after.
-
 The current functions are the follow ones:
 
   $BF02 : Set a memory bank from a memory pointer.
@@ -121,6 +118,11 @@ The current functions are the follow ones:
 
   $BF11 : Free; frees a block reserved with Malloc. Receives in HL the pointer returned by
           malloc.
+
+  $BF14 : Spinlock; disables the maskable interrupts and increment the spin counter. Useful to
+          implement semaphores and other synchronize primitives (with Spinunlock).
+
+  $BF17 : Spinunlock; decrements the spin counter. If it reaches 0, enables the maskable interrupts.
 
 ## TODO
 
